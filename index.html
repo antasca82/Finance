@@ -62,6 +62,8 @@ header{padding:18px 0 10px}
 .confronto td{padding:9px 10px;text-align:right;border-top:1px solid var(--linea);font-weight:600}
 .confronto td:first-child{text-align:left;font-weight:400;color:var(--soft);padding-left:16px}
 .confronto td:last-child,.confronto th:last-child{padding-right:16px}
+.confronto tr.saldo td{border-top:2px solid var(--linea);font-weight:700}
+.confronto tr.saldo td:first-child{color:var(--inchiostro);font-weight:600}
 
 .blocco{background:var(--carta);border:1px solid var(--linea);border-radius:var(--r);margin-top:14px;overflow:hidden}
 .blocco h2{font-size:.84rem;font-weight:600;margin:0;padding:14px 16px 8px;color:var(--soft)}
@@ -448,7 +450,12 @@ function vistaMese(){
         <td class="num ${scartoE<0?"neg":"pos"}">${scartoE>0?"+":""}${euroCorto(scartoE)}</td></tr>
       <tr><td>Uscite</td><td class="num">${euroCorto(b.stimaU)}</td><td class="num">${euroCorto(b.realeU)}</td>
         <td class="num ${scartoU>0?"neg":"pos"}">${scartoU>0?"+":""}${euroCorto(scartoU)}</td></tr>
+      <tr class="saldo"><td>In cassa</td><td class="num">${euroCorto(b.stimaE-b.stimaU)}</td>
+        <td class="num ${b.realeE-b.realeU<0?"neg":"pos"}">${euroCorto(b.realeE-b.realeU)}</td>
+        <td class="num">${((b.realeE-b.realeU)-(b.stimaE-b.stimaU))>0?"+":""}${euroCorto((b.realeE-b.realeU)-(b.stimaE-b.stimaU))}</td></tr>
     </tbody></table>
+    <p style="margin:0;padding:10px 16px 12px;font-size:.76rem;color:var(--soft);border-top:1px solid var(--linea)">
+      Soldi davvero entrati e usciti in ${nomeMese(meseCorrente).split(" ")[0]}, quote di accantonamento escluse.</p>
   </section>
 
   ${b.righeE.length?`<section class="blocco"><h2>Entrate <span class="q">${b.righeE.filter(x=>x.chiusa).length}/${b.righeE.length} reali</span></h2>${b.righeE.map(rigaVoce).join("")}</section>`:""}
