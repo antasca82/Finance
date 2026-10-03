@@ -1,0 +1,958 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#E6EAE2">
+<title>Finanze</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Familjen+Grotesk:ital,wght@0,400..700;1,400&display=swap" rel="stylesheet">
+<style>
+:root{
+  --fondo:#E6EAE2; --carta:#FBFBF7; --inchiostro:#1B2A2E; --soft:#5F6E6E; --linea:#D3D9CF;
+  --entrata:#2F6B4F; --uscita:#A33B2A; --impegno:#C8902E; --libero:#2B6E78; --r:14px;
+  box-sizing:border-box; padding-top:env(safe-area-inset-top,0px);
+}
+*,*::before,*::after{box-sizing:inherit}
+html,body{margin:0;padding:0}
+body{background:var(--fondo);color:var(--inchiostro);
+  font-family:"Familjen Grotesk","Helvetica Neue",-apple-system,BlinkMacSystemFont,sans-serif;
+  font-size:16px;line-height:1.45;-webkit-text-size-adjust:100%;
+  padding-bottom:calc(84px + env(safe-area-inset-bottom,0px))}
+button,input,select{font:inherit;color:inherit}
+button{cursor:pointer;background:none;border:none}
+.num{font-variant-numeric:tabular-nums;letter-spacing:-0.01em}
+.wrap{max-width:560px;margin:0 auto;padding:0 16px}
+
+header{padding:18px 0 10px}
+.mese-nav{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.mese-nav h1{font-size:1.35rem;font-weight:600;margin:0;letter-spacing:-0.02em}
+.mese-nav button{width:38px;height:38px;border-radius:50%;border:1px solid var(--linea);
+  display:flex;align-items:center;justify-content:center;font-size:1.1rem;background:var(--carta)}
+.mese-nav button:disabled{opacity:.3}
+.sync-riga{display:flex;align-items:center;gap:8px;font-size:.78rem;color:var(--soft);margin-top:6px}
+.punto{width:7px;height:7px;border-radius:50%;background:var(--soft);flex:none}
+.punto.ok{background:var(--entrata)} .punto.ko{background:var(--uscita)} .punto.wait{background:var(--impegno)}
+.sync-riga button{text-decoration:underline;color:var(--soft);font-size:.78rem;padding:0}
+
+.mese-barra{background:var(--carta);border:1px solid var(--linea);border-radius:var(--r);padding:18px 16px 14px;margin-top:14px}
+.barra{position:relative;height:46px;border-radius:8px;overflow:hidden;background:#E9EDE6;display:flex}
+.seg{height:100%}
+.seg.speso{background:var(--uscita)} .seg.impegnato{background:var(--impegno)} .seg.libero{background:var(--libero)}
+.oggi-tick{position:absolute;top:-4px;bottom:-4px;width:2px;background:var(--inchiostro);opacity:.75}
+.oggi-tick::after{content:"oggi";position:absolute;top:-15px;left:50%;transform:translateX(-50%);
+  font-size:.62rem;color:var(--inchiostro);opacity:.75}
+.barra-legenda{margin-top:16px;display:flex;flex-direction:column;gap:9px}
+.leg{display:flex;align-items:baseline;gap:9px;font-size:.92rem}
+.leg .chiave{width:9px;height:9px;border-radius:2px;flex:none;position:relative;top:-1px}
+.leg .etichetta{flex:1;color:var(--soft)}
+.leg .valore{font-weight:600}
+.riepilogo{display:flex;gap:10px;margin-top:16px;padding-top:14px;border-top:1px solid var(--linea)}
+.riepilogo div{flex:1}
+.riepilogo .et{font-size:.75rem;color:var(--soft);display:block;margin-bottom:2px}
+.riepilogo .vl{font-size:1.18rem;font-weight:600}
+.pos{color:var(--entrata)} .neg{color:var(--uscita)} .att{color:var(--impegno)}
+
+.confronto{margin-top:14px;background:var(--carta);border:1px solid var(--linea);border-radius:var(--r);overflow:hidden}
+.confronto table{width:100%;border-collapse:collapse}
+.confronto th{font-size:.72rem;font-weight:500;color:var(--soft);text-align:right;padding:11px 10px 7px}
+.confronto th:first-child{text-align:left;padding-left:16px}
+.confronto td{padding:9px 10px;text-align:right;border-top:1px solid var(--linea);font-weight:600}
+.confronto td:first-child{text-align:left;font-weight:400;color:var(--soft);padding-left:16px}
+.confronto td:last-child,.confronto th:last-child{padding-right:16px}
+
+.blocco{background:var(--carta);border:1px solid var(--linea);border-radius:var(--r);margin-top:14px;overflow:hidden}
+.blocco h2{font-size:.84rem;font-weight:600;margin:0;padding:14px 16px 8px;color:var(--soft)}
+.blocco h2 .q{float:right;font-weight:400}
+.vuoto{padding:22px 16px;color:var(--soft);font-size:.9rem}
+.vuoto b{display:block;color:var(--inchiostro);font-weight:600;margin-bottom:3px}
+
+.voce{display:flex;align-items:center;gap:12px;padding:11px 16px;border-top:1px solid var(--linea);width:100%;text-align:left}
+.voce .corpo{flex:1;min-width:0}
+.voce .nome{font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.voce .sotto{font-size:.74rem;color:var(--soft)}
+.voce .numeri{text-align:right;white-space:nowrap}
+.voce .principale{font-weight:600}
+.voce .secondario{font-size:.74rem;color:var(--soft)}
+.voce .attesa{color:var(--impegno);font-weight:500}
+
+.riga{display:flex;align-items:center;gap:12px;padding:11px 16px;border-top:1px solid var(--linea);width:100%;text-align:left}
+.riga .pittogramma{width:34px;height:34px;border-radius:9px;flex:none;display:flex;align-items:center;
+  justify-content:center;font-size:.76rem;font-weight:600;background:#EDF0EA;color:var(--soft)}
+.riga .corpo{flex:1;min-width:0}
+.riga .titolo{font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.riga .sotto{font-size:.76rem;color:var(--soft)}
+.riga .cifra{font-weight:600;white-space:nowrap}
+.giorno-sep{padding:10px 16px 4px;font-size:.75rem;color:var(--soft);border-top:1px solid var(--linea);background:#F5F7F2}
+
+.cat-riga{padding:10px 16px;border-top:1px solid var(--linea)}
+.cat-testa{display:flex;justify-content:space-between;align-items:baseline;font-size:.9rem;margin-bottom:6px}
+.cat-testa .d{font-size:.75rem;color:var(--soft)}
+.cat-barra{height:7px;border-radius:4px;background:#EDF0EA;overflow:hidden}
+.cat-barra span{display:block;height:100%;background:var(--uscita);border-radius:4px}
+
+nav{position:fixed;left:0;right:0;bottom:0;background:rgba(251,251,247,.96);backdrop-filter:blur(10px);
+  border-top:1px solid var(--linea);padding-bottom:env(safe-area-inset-bottom,0px);z-index:40}
+nav .tabs{max-width:560px;margin:0 auto;display:flex}
+nav button{flex:1;padding:9px 2px 10px;font-size:.68rem;color:var(--soft);
+  display:flex;flex-direction:column;align-items:center;gap:3px}
+nav button .g{width:20px;height:20px;opacity:.55}
+nav button[aria-current="page"]{color:var(--inchiostro);font-weight:600}
+nav button[aria-current="page"] .g{opacity:1}
+.aggiungi{position:fixed;right:16px;bottom:calc(74px + env(safe-area-inset-bottom,0px));
+  width:56px;height:56px;border-radius:50%;background:var(--inchiostro);color:#fff;font-size:1.7rem;
+  display:flex;align-items:center;justify-content:center;z-index:41;box-shadow:0 6px 18px rgba(27,42,46,.28)}
+
+.pannello{position:fixed;inset:0;background:rgba(27,42,46,.35);z-index:50;display:flex;align-items:flex-end;justify-content:center}
+.pannello[hidden]{display:none}
+.foglio{background:var(--carta);width:100%;max-width:560px;border-radius:18px 18px 0 0;
+  padding:16px 16px calc(16px + env(safe-area-inset-bottom,0px));max-height:94vh;overflow:auto}
+.foglio-testa{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
+.foglio-testa h3{margin:0;font-size:1.05rem;font-weight:600}
+.foglio-testa button{color:var(--soft);font-size:.9rem}
+.nota-foglio{font-size:.82rem;color:var(--soft);margin:0 0 14px}
+
+.tipo-switch{display:flex;background:#EDF0EA;border-radius:10px;padding:3px;margin-bottom:14px}
+.tipo-switch button{flex:1;padding:9px;border-radius:8px;font-size:.92rem;font-weight:500;color:var(--soft)}
+.tipo-switch button[aria-pressed="true"]{background:var(--carta);color:var(--inchiostro);box-shadow:0 1px 3px rgba(27,42,46,.12)}
+.display{text-align:center;padding:10px 0 14px}
+.display .cifra{font-size:2.6rem;font-weight:600;letter-spacing:-0.03em}
+.display .sotto{font-size:.8rem;color:var(--soft)}
+.chips{display:flex;flex-wrap:wrap;gap:7px;margin-bottom:14px}
+.chip{padding:7px 12px;border-radius:999px;border:1px solid var(--linea);font-size:.86rem;color:var(--soft)}
+.chip[aria-pressed="true"]{background:var(--inchiostro);color:#fff;border-color:var(--inchiostro)}
+.tastierino{display:grid;grid-template-columns:repeat(3,1fr);gap:7px;margin-bottom:12px}
+.tastierino button{padding:15px 0;border-radius:11px;background:#EDF0EA;font-size:1.3rem;font-weight:500}
+.tastierino button:active{background:#E0E5DC}
+.campo{display:block;margin-bottom:12px}
+.campo span{display:block;font-size:.78rem;color:var(--soft);margin-bottom:5px}
+.campo input,.campo select{width:100%;padding:11px 12px;border:1px solid var(--linea);border-radius:10px;
+  background:var(--carta);-webkit-appearance:none}
+.doppio{display:flex;gap:10px}
+.doppio>*{flex:1}
+.primario{width:100%;padding:14px;border-radius:12px;background:var(--inchiostro);color:#fff;font-size:1rem;font-weight:600}
+.primario:disabled{opacity:.35}
+.distruttivo{width:100%;padding:12px;border-radius:12px;color:var(--uscita);font-size:.92rem;margin-top:8px}
+.secondario{width:100%;padding:12px;border-radius:12px;border:1px solid var(--linea);font-size:.95rem;margin-top:8px}
+
+.colonne{display:flex;align-items:flex-end;gap:5px;height:150px;padding:16px 16px 0}
+.colonna{flex:1;display:flex;flex-direction:column;justify-content:flex-end;height:100%}
+.colonna .coppia{display:flex;gap:2px;align-items:flex-end;height:100%}
+.colonna .coppia>*{flex:1;border-radius:3px 3px 0 0;min-height:2px}
+.colonna .e{background:var(--entrata)} .colonna .u{background:var(--uscita)}
+.etichette{display:flex;gap:5px;padding:6px 16px 14px}
+.etichette span{flex:1;text-align:center;font-size:.62rem;color:var(--soft)}
+.legenda-storico{display:flex;gap:14px;padding:0 16px 14px;font-size:.78rem;color:var(--soft)}
+.legenda-storico i{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:5px}
+
+.ob{padding:14px 16px;border-top:1px solid var(--linea)}
+.ob-testa{display:flex;justify-content:space-between;align-items:baseline;gap:10px}
+.ob-testa .nome{font-weight:600}
+.ob-barra{height:9px;border-radius:5px;background:#EDF0EA;margin:9px 0 7px;overflow:hidden}
+.ob-barra span{display:block;height:100%;background:var(--libero);border-radius:5px}
+.ob-nota{font-size:.79rem;color:var(--soft)}
+.ob-nota.allerta{color:var(--uscita)}
+.ob-azioni{display:flex;gap:8px;margin-top:10px}
+.ob-azioni button{flex:1;padding:9px;border-radius:9px;border:1px solid var(--linea);font-size:.85rem}
+
+.avviso{background:#FBF2DE;border:1px solid #E8D3A0;border-radius:var(--r);padding:12px 14px;margin-top:14px;font-size:.88rem}
+.avviso button{text-decoration:underline;font-weight:600}
+.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(100px + env(safe-area-inset-bottom,0px));
+  background:var(--inchiostro);color:#fff;padding:10px 16px;border-radius:999px;font-size:.86rem;z-index:60;
+  opacity:0;pointer-events:none;transition:opacity .2s}
+.toast.vedi{opacity:1}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+:focus-visible{outline:2px solid var(--libero);outline-offset:2px}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <header>
+    <div class="mese-nav">
+      <button id="meseGiu" aria-label="Mese precedente">‹</button>
+      <h1 id="meseTitolo">—</h1>
+      <button id="meseSu" aria-label="Mese successivo">›</button>
+    </div>
+    <div class="sync-riga">
+      <span class="punto" id="syncPunto"></span>
+      <span id="syncTesto">Solo su questo dispositivo</span>
+      <button id="apriImpostazioni">Impostazioni</button>
+    </div>
+  </header>
+  <main id="vista"></main>
+</div>
+
+<button class="aggiungi" id="btnAggiungi" aria-label="Aggiungi spesa fuori stima">+</button>
+
+<nav><div class="tabs">
+  <button data-vista="mese" aria-current="page"><svg class="g" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>Reale</button>
+  <button data-vista="stime"><svg class="g" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M5 3h14v18l-3-2-2 2-2-2-2 2-2-2-3 2z"/><path d="M9 8h6M9 12h6"/></svg>Stime</button>
+  <button data-vista="movimenti"><svg class="g" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 7h16M4 12h16M4 17h10"/></svg>Movimenti</button>
+  <button data-vista="storico"><svg class="g" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>Storico</button>
+  <button data-vista="obiettivi"><svg class="g" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4"/></svg>Obiettivi</button>
+</div></nav>
+
+<div class="pannello" id="pannello" hidden><div class="foglio" id="foglio"></div></div>
+<div class="toast" id="toast"></div>
+
+<script>
+"use strict";
+
+/* ================= costanti ================= */
+const CHIAVE="finanze.v2", CHIAVE_SYNC="finanze.sync";
+const MESI=["gennaio","febbraio","marzo","aprile","maggio","giugno","luglio","agosto","settembre","ottobre","novembre","dicembre"];
+const CAT_USCITA=["Casa","Spesa","Trasporti","Bollette","Salute","Famiglia","Svago","Risparmio","Altro"];
+const CAT_ENTRATA=["Stipendio","Extra","Rimborsi","Altro"];
+const CADENZE=[{n:1,e:"Ogni mese"},{n:2,e:"Ogni 2 mesi"},{n:3,e:"Ogni 3 mesi"},{n:4,e:"Ogni 4 mesi"},{n:6,e:"Ogni 6 mesi"},{n:12,e:"Una volta l'anno"}];
+
+/* ================= stato ================= */
+let dati={ voci:[], movimenti:[], stime:{}, obiettivi:[], aggiornato:0 };
+let sync={ owner:"", repo:"", percorso:"finanze.json", ramo:"main", token:"", sha:null, ultimo:0 };
+let vistaAttiva="mese";
+let meseCorrente=chiaveMese(new Date());
+let bozza=null, timerPush=null;
+
+/* ================= utilità ================= */
+function chiaveMese(d){ return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0"); }
+function oggiISO(){ const d=new Date(); return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0"); }
+function meseDi(iso){ return iso.slice(0,7); }
+function giorniNelMese(mk){ const [a,m]=mk.split("-").map(Number); return new Date(a,m,0).getDate(); }
+function nomeMese(mk){ const [a,m]=mk.split("-").map(Number); return MESI[m-1]+" "+a; }
+function meseAdiacente(mk,d){ const [a,m]=mk.split("-").map(Number); return chiaveMese(new Date(a,m-1+d,1)); }
+function euro(n){ return (n<0?"−":"")+Math.abs(n).toLocaleString("it-IT",{minimumFractionDigits:2,maximumFractionDigits:2})+" €"; }
+function euroCorto(n){ return (n<0?"−":"")+Math.round(Math.abs(n)).toLocaleString("it-IT")+" €"; }
+function id(){ return Date.now().toString(36)+Math.random().toString(36).slice(2,7); }
+function esc(s){ return String(s==null?"":s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
+function dataBreve(iso){ const [,m,g]=iso.split("-"); return Number(g)+" "+MESI[Number(m)-1].slice(0,3); }
+function numero(v){ return Number(String(v).replace(/\s/g,"").replace(",","."))||0; }
+function toast(m){ const t=document.getElementById("toast"); t.textContent=m; t.classList.add("vedi");
+  clearTimeout(t._t); t._t=setTimeout(()=>t.classList.remove("vedi"),2200); }
+
+/* ================= persistenza ================= */
+function migra(g){
+  if(g.fisse && !g.voci){
+    g.voci=(g.fisse||[]).map(f=>({id:f.id,nome:f.nome,tipo:f.tipo,categoria:f.categoria,
+      importo:f.importo,cadenza:1,giorno:f.giorno||1,meseRif:null,inizio:null,attiva:f.attiva!==false}));
+    (g.movimenti||[]).forEach(m=>{ if(m.fissaId && !m.voceId) m.voceId=m.fissaId; });
+  }
+  return g;
+}
+function carica(){
+  try{
+    let g=localStorage.getItem(CHIAVE);
+    if(!g) g=localStorage.getItem("finanze.v1");
+    if(g) dati=Object.assign(dati,migra(JSON.parse(g)));
+  }catch(e){}
+  try{ const s=localStorage.getItem(CHIAVE_SYNC); if(s) sync=Object.assign(sync,JSON.parse(s)); }catch(e){}
+  if(!dati.voci) dati.voci=[]; if(!dati.stime) dati.stime={};
+  if(!dati.movimenti) dati.movimenti=[]; if(!dati.obiettivi) dati.obiettivi=[];
+}
+function salva(){
+  dati.aggiornato=Date.now();
+  try{ localStorage.setItem(CHIAVE,JSON.stringify(dati)); }catch(e){ toast("Memoria del browser piena"); }
+  if(configurato()){ clearTimeout(timerPush); statoSync("wait","Salvataggio in corso…"); timerPush=setTimeout(spingiSuGitHub,1800); }
+}
+function salvaSync(){ try{ localStorage.setItem(CHIAVE_SYNC,JSON.stringify(sync)); }catch(e){} }
+
+/* ================= GitHub ================= */
+function statoSync(c,t){ const p=document.getElementById("syncPunto");
+  p.className="punto"+(c?" "+c:""); document.getElementById("syncTesto").textContent=t; }
+function configurato(){ return !!(sync.token&&sync.owner&&sync.repo&&sync.percorso); }
+function urlContenuti(){ return "https://api.github.com/repos/"+encodeURIComponent(sync.owner)+"/"+encodeURIComponent(sync.repo)
+  +"/contents/"+sync.percorso.split("/").map(encodeURIComponent).join("/"); }
+function intestazioni(){ return {"Authorization":"Bearer "+sync.token,"Accept":"application/vnd.github+json","Content-Type":"application/json"}; }
+function b64aTesto(b64){ const g=atob(b64.replace(/\s/g,"")); const b=new Uint8Array(g.length);
+  for(let i=0;i<g.length;i++) b[i]=g.charCodeAt(i); return new TextDecoder("utf-8").decode(b); }
+function testoAb64(t){ const b=new TextEncoder().encode(t); let g="";
+  for(let i=0;i<b.length;i++) g+=String.fromCharCode(b[i]); return btoa(g); }
+async function tiraDaGitHub(silenzioso){
+  if(!configurato()) return;
+  statoSync("wait","Lettura dal repository…");
+  try{
+    const r=await fetch(urlContenuti()+"?ref="+encodeURIComponent(sync.ramo)+"&t="+Date.now(),{headers:intestazioni(),cache:"no-store"});
+    if(r.status===404){ sync.sha=null; salvaSync(); statoSync("ok","File non ancora creato sul repository"); return; }
+    if(!r.ok) throw new Error("HTTP "+r.status);
+    const j=await r.json(); sync.sha=j.sha;
+    const remoto=migra(JSON.parse(b64aTesto(j.content)));
+    if((remoto.aggiornato||0)>(dati.aggiornato||0)){
+      dati=Object.assign({voci:[],movimenti:[],stime:{},obiettivi:[]},remoto);
+      localStorage.setItem(CHIAVE,JSON.stringify(dati));
+      disegna(); if(!silenzioso) toast("Dati aggiornati dal repository");
+    }
+    sync.ultimo=Date.now(); salvaSync();
+    statoSync("ok","Sincronizzato alle "+new Date().toLocaleTimeString("it-IT",{hour:"2-digit",minute:"2-digit"}));
+  }catch(e){ statoSync("ko","Lettura non riuscita: "+e.message); }
+}
+async function spingiSuGitHub(){
+  if(!configurato()) return;
+  statoSync("wait","Invio al repository…");
+  try{
+    const corpo={message:"Aggiornamento finanze "+new Date().toLocaleString("it-IT"),
+      content:testoAb64(JSON.stringify(dati,null,2)),branch:sync.ramo};
+    if(sync.sha) corpo.sha=sync.sha;
+    let r=await fetch(urlContenuti(),{method:"PUT",headers:intestazioni(),body:JSON.stringify(corpo)});
+    if(r.status===409||r.status===422){
+      const c=await fetch(urlContenuti()+"?ref="+encodeURIComponent(sync.ramo),{headers:intestazioni(),cache:"no-store"});
+      if(c.ok){ const j=await c.json(); corpo.sha=j.sha;
+        r=await fetch(urlContenuti(),{method:"PUT",headers:intestazioni(),body:JSON.stringify(corpo)}); }
+    }
+    if(!r.ok) throw new Error("HTTP "+r.status);
+    const j=await r.json(); sync.sha=j.content.sha; sync.ultimo=Date.now(); salvaSync();
+    statoSync("ok","Salvato alle "+new Date().toLocaleTimeString("it-IT",{hour:"2-digit",minute:"2-digit"}));
+  }catch(e){ statoSync("ko","Salvataggio non riuscito: "+e.message+" — i dati restano su questo dispositivo"); }
+}
+
+/* ================= motore stime/reale ================= */
+function vociAttive(){ return (dati.voci||[]).filter(v=>v.attiva!==false); }
+function quota(v){ return v.importo/(v.cadenza||1); }
+function stimaMese(v,mk){ const o=dati.stime[v.id+":"+mk]; return o!=null?Number(o):quota(v); }
+function realeMese(v,mk){
+  return (dati.movimenti||[]).filter(m=>m.voceId===v.id&&meseDi(m.data)===mk).reduce((s,m)=>s+m.importo,0);
+}
+function haReale(v,mk){ return (dati.movimenti||[]).some(m=>m.voceId===v.id&&meseDi(m.data)===mk); }
+function scadeNel(v,mk){
+  if((v.cadenza||1)===1) return true;
+  const m=Number(mk.slice(5)), rif=v.meseRif||1;
+  return ((m-rif)%v.cadenza+v.cadenza)%v.cadenza===0;
+}
+function prossimaScadenza(v,mk){
+  if((v.cadenza||1)===1) return mk;
+  let c=mk, g=0;
+  while(!scadeNel(v,c)&&g++<24) c=meseAdiacente(c,1);
+  return c;
+}
+/* fondo accumulato per le voci periodiche, con lo scoperto del mese richiesto */
+function fondoDi(v,mk){
+  let f=0, scoperto=0, c=v.inizio||mk, g=0;
+  if(c>mk) return {fondo:0,scoperto:0};
+  while(c<=mk&&g++<400){
+    f+=stimaMese(v,c);
+    const r=realeMese(v,c);
+    if(r>f){ if(c===mk) scoperto=r-f; f=0; } else { f-=r; }
+    c=meseAdiacente(c,1);
+  }
+  return {fondo:f,scoperto:scoperto};
+}
+/* riga di calcolo per una voce in un mese */
+function calcolaVoce(v,mk){
+  const s=stimaMese(v,mk), r=realeMese(v,mk), chiusa=haReale(v,mk), periodica=(v.cadenza||1)>1;
+  if(periodica){
+    const {fondo,scoperto}=fondoDi(v,mk);
+    return {voce:v,stima:s,reale:r,chiusa,periodica,fondo,scoperto,
+      previsto:s+scoperto, pesoSpeso:scoperto, pesoImpegnato:s, scarto:0};
+  }
+  return {voce:v,stima:s,reale:r,chiusa,periodica,fondo:0,scoperto:0,
+    previsto:chiusa?r:s, pesoSpeso:chiusa?r:0, pesoImpegnato:chiusa?0:s, scarto:chiusa?r-s:0};
+}
+function fuoriStima(mk){
+  return (dati.movimenti||[]).filter(m=>!m.voceId&&meseDi(m.data)===mk);
+}
+function bilancio(mk){
+  const righe=vociAttive().map(v=>calcolaVoce(v,mk));
+  const u=righe.filter(x=>x.voce.tipo==="uscita"), e=righe.filter(x=>x.voce.tipo==="entrata");
+  const fp=fuoriStima(mk);
+  const fpU=fp.filter(m=>m.tipo==="uscita").reduce((s,m)=>s+m.importo,0);
+  const fpE=fp.filter(m=>m.tipo==="entrata").reduce((s,m)=>s+m.importo,0);
+  const somma=(a,k)=>a.reduce((s,x)=>s+x[k],0);
+  return {
+    righe, righeU:u, righeE:e, fp, fpU, fpE,
+    stimaU:somma(u,"stima"), stimaE:somma(e,"stima"),
+    realeU:somma(u,"reale")+fpU, realeE:somma(e,"reale")+fpE,
+    previstoU:somma(u,"previsto")+fpU, previstoE:somma(e,"previsto")+fpE,
+    speso:somma(u,"pesoSpeso")+fpU, impegnato:somma(u,"pesoImpegnato"),
+    get libero(){ return this.previstoE-this.previstoU; }
+  };
+}
+function giorniRimanenti(mk){
+  const o=new Date(), mo=chiaveMese(o);
+  if(mk<mo) return 0; if(mk>mo) return giorniNelMese(mk);
+  return giorniNelMese(mk)-o.getDate()+1;
+}
+
+/* ================= render ================= */
+function disegna(){
+  document.getElementById("meseTitolo").textContent=nomeMese(meseCorrente);
+  document.getElementById("meseSu").disabled=meseCorrente>=meseAdiacente(chiaveMese(new Date()),12);
+  const v=document.getElementById("vista");
+  v.innerHTML = vistaAttiva==="mese"?vistaMese()
+    : vistaAttiva==="stime"?vistaStime()
+    : vistaAttiva==="movimenti"?vistaMovimenti()
+    : vistaAttiva==="storico"?vistaStorico() : vistaObiettivi();
+  collega();
+}
+
+function vistaMese(){
+  const b=bilancio(meseCorrente);
+  if(!dati.voci.length && !b.fp.length){
+    return `<div class="avviso">Le stime sono vuote. Comincia da lì: stipendio, affitto, spesa, bollette, assicurazione. Ogni voce ha una stima, e qui ci metterai poi gli importi reali. <button data-vai="stime">Apri le stime</button></div>`;
+  }
+  const base=Math.max(b.previstoE,b.previstoU,1);
+  const pSpeso=Math.min(100,b.speso/base*100);
+  const pImp=Math.min(100-pSpeso,b.impegnato/base*100);
+  const pLib=Math.max(0,Math.min(100-pSpeso-pImp,b.libero/base*100));
+  const o=new Date(), tick = meseCorrente===chiaveMese(o)?(o.getDate()/giorniNelMese(meseCorrente)*100):null;
+  const gr=giorniRimanenti(meseCorrente);
+  const scartoU=b.realeU-b.stimaU, scartoE=b.realeE-b.stimaE;
+  const daInserire=b.righe.filter(x=>!x.chiusa&&!x.periodica).length;
+
+  const rigaVoce=x=>{
+    const v=x.voce, segno=v.tipo==="entrata"?"+":"−";
+    let secondo;
+    if(x.periodica){
+      secondo=`fondo ${euroCorto(x.fondo)} · ${x.reale?("pagato "+euroCorto(x.reale)):("quota "+euroCorto(x.stima))}`;
+    } else if(x.chiusa){
+      const d=x.reale-x.stima;
+      secondo=`stima ${euroCorto(x.stima)}${Math.abs(d)>=0.5?` · ${d>0?"+":"−"}${euroCorto(Math.abs(d))}`:""}`;
+    } else {
+      secondo="stimato";
+    }
+    const colore = x.chiusa ? (v.tipo==="entrata"
+        ? (x.reale>=x.stima?"pos":"neg")
+        : (x.reale>x.stima?"neg":"pos"))
+      : "";
+    return `<button class="voce" data-voce="${v.id}">
+      <div class="corpo"><div class="nome">${esc(v.nome)}</div>
+        <div class="sotto">${esc(v.categoria)}${x.periodica?" · "+CADENZE.find(c=>c.n===v.cadenza).e.toLowerCase():""}</div></div>
+      <div class="numeri">
+        <div class="principale num ${x.chiusa||x.periodica?colore:"attesa"}">${segno}${euro(x.chiusa||x.periodica?(x.reale||x.stima):x.stima)}</div>
+        <div class="secondario">${secondo}</div>
+      </div></button>`;
+  };
+
+  return `
+  <section class="mese-barra">
+    <div class="barra">
+      <div class="seg speso" style="width:${pSpeso}%"></div>
+      <div class="seg impegnato" style="width:${pImp}%"></div>
+      <div class="seg libero" style="width:${pLib}%"></div>
+      ${tick!==null?`<div class="oggi-tick" style="left:${tick}%"></div>`:""}
+    </div>
+    <div class="barra-legenda">
+      <div class="leg"><i class="chiave" style="background:var(--uscita)"></i><span class="etichetta">Uscite già reali</span><span class="valore num">${euro(b.speso)}</span></div>
+      <div class="leg"><i class="chiave" style="background:var(--impegno)"></i><span class="etichetta">Ancora a stima</span><span class="valore num">${euro(b.impegnato)}</span></div>
+      <div class="leg"><i class="chiave" style="background:var(--libero)"></i><span class="etichetta">Libero fino a fine mese</span><span class="valore num ${b.libero<0?"neg":""}">${euro(b.libero)}</span></div>
+    </div>
+    <div class="riepilogo">
+      <div><span class="et">Entrate previste</span><span class="vl num pos">${euro(b.previstoE)}</span></div>
+      <div><span class="et">${gr>0?"Al giorno da qui a fine mese":"Chiuso con"}</span><span class="vl num ${b.libero<0?"neg":""}">${gr>0?euro(b.libero/gr):euro(b.previstoE-b.previstoU)}</span></div>
+    </div>
+  </section>
+
+  <section class="confronto">
+    <table><thead><tr><th>&nbsp;</th><th>Stimato</th><th>Reale</th><th>Scarto</th></tr></thead>
+    <tbody>
+      <tr><td>Entrate</td><td class="num">${euroCorto(b.stimaE)}</td><td class="num">${euroCorto(b.realeE)}</td>
+        <td class="num ${scartoE<0?"neg":"pos"}">${scartoE>0?"+":""}${euroCorto(scartoE)}</td></tr>
+      <tr><td>Uscite</td><td class="num">${euroCorto(b.stimaU)}</td><td class="num">${euroCorto(b.realeU)}</td>
+        <td class="num ${scartoU>0?"neg":"pos"}">${scartoU>0?"+":""}${euroCorto(scartoU)}</td></tr>
+    </tbody></table>
+  </section>
+
+  ${b.righeE.length?`<section class="blocco"><h2>Entrate <span class="q">${b.righeE.filter(x=>x.chiusa).length}/${b.righeE.length} reali</span></h2>${b.righeE.map(rigaVoce).join("")}</section>`:""}
+  ${b.righeU.filter(x=>!x.periodica).length?`<section class="blocco"><h2>Uscite del mese ${daInserire?`<span class="q">${daInserire} da inserire</span>`:'<span class="q">tutte reali</span>'}</h2>${b.righeU.filter(x=>!x.periodica).map(rigaVoce).join("")}</section>`:""}
+  ${b.righeU.filter(x=>x.periodica).length?`<section class="blocco"><h2>Accantonamenti</h2>
+    ${b.righeU.filter(x=>x.periodica).map(x=>{
+      const prox=prossimaScadenza(x.voce,meseCorrente);
+      return `<button class="voce" data-voce="${x.voce.id}">
+        <div class="corpo"><div class="nome">${esc(x.voce.nome)}</div>
+          <div class="sotto">${euroCorto(x.voce.importo)} ${CADENZE.find(c=>c.n===x.voce.cadenza).e.toLowerCase()} · attesa ${nomeMese(prox).split(" ")[0]}</div></div>
+        <div class="numeri"><div class="principale num">${euro(x.fondo)}</div>
+          <div class="secondario">nel fondo · ${euroCorto(x.stima)}/mese${x.scoperto?" · scoperto "+euroCorto(x.scoperto):""}</div></div></button>`;
+    }).join("")}</section>`:""}
+
+  <section class="blocco"><h2>Fuori stima <span class="q">${euro(b.fpU-b.fpE)}</span></h2>
+  ${b.fp.length?b.fp.slice().sort((a,c)=>c.data.localeCompare(a.data)).map(rigaMovimento).join("")
+    :'<div class="vuoto">Niente di imprevisto questo mese. Le spese che non rientrano in una voce delle stime finiscono qui.</div>'}
+  </section>`;
+}
+
+function rigaMovimento(m){
+  const v=dati.voci.find(x=>x.id===m.voceId);
+  return `<button class="riga" data-mov="${m.id}">
+    <div class="pittogramma">${esc((m.categoria||"?").slice(0,2))}</div>
+    <div class="corpo"><div class="titolo">${esc(m.nota||(v?v.nome:m.categoria))}</div>
+      <div class="sotto">${dataBreve(m.data)} · ${esc(m.categoria)}${v?" · "+esc(v.nome):" · fuori stima"}</div></div>
+    <div class="cifra num ${m.tipo==="entrata"?"pos":""}">${m.tipo==="entrata"?"+":"−"}${euro(m.importo)}</div></button>`;
+}
+
+function vistaStime(){
+  const att=vociAttive();
+  const sommaMensile=t=>att.filter(v=>v.tipo===t).reduce((s,v)=>s+quota(v),0);
+  const e=sommaMensile("entrata"), u=sommaMensile("uscita");
+  const gruppo=(titolo,lista)=>lista.length?`<section class="blocco"><h2>${titolo}</h2>${lista.map(v=>`
+    <button class="voce" data-mod-voce="${v.id}" style="${v.attiva===false?"opacity:.45":""}">
+      <div class="corpo"><div class="nome">${esc(v.nome)}</div>
+        <div class="sotto">${esc(v.categoria)}${v.cadenza>1?" · "+euroCorto(v.importo)+" "+CADENZE.find(c=>c.n===v.cadenza).e.toLowerCase()+", a "+MESI[(v.meseRif||1)-1]:""}</div></div>
+      <div class="numeri"><div class="principale num ${v.tipo==="entrata"?"pos":""}">${v.tipo==="entrata"?"+":"−"}${euro(quota(v))}</div>
+        <div class="secondario">al mese</div></div></button>`).join("")}</section>`:"";
+  return `
+  <section class="mese-barra"><div class="riepilogo" style="border:0;padding:0;margin:0">
+    <div><span class="et">Entrate stimate</span><span class="vl num pos">${euro(e)}</span></div>
+    <div><span class="et">Uscite stimate</span><span class="vl num neg">${euro(u)}</span></div>
+    <div><span class="et">Resta</span><span class="vl num ${e-u<0?"neg":""}">${euro(e-u)}</span></div>
+  </div></section>
+  ${!dati.voci.length?`<section class="blocco"><div class="vuoto"><b>Qui vive il piano, non la realtà</b>Metti ogni voce ricorrente con l'importo che ti aspetti: lo stipendio medio, l'affitto, la spesa, le bollette, l'assicurazione annuale. Le voci che non sono mensili le divido io per i mesi di cadenza, così la stima mensile torna sempre.</div></section>`:""}
+  ${gruppo("Entrate",dati.voci.filter(v=>v.tipo==="entrata"))}
+  ${gruppo("Uscite mensili",dati.voci.filter(v=>v.tipo==="uscita"&&(v.cadenza||1)===1))}
+  ${gruppo("Uscite periodiche",dati.voci.filter(v=>v.tipo==="uscita"&&(v.cadenza||1)>1))}
+  <button class="primario" data-nuova-voce style="margin-top:14px">Aggiungi una voce</button>`;
+}
+
+function vistaMovimenti(){
+  const mv=(dati.movimenti||[]).filter(m=>meseDi(m.data)===meseCorrente)
+    .sort((a,b)=>b.data.localeCompare(a.data)||b.id.localeCompare(a.id));
+  if(!mv.length) return `<section class="blocco"><div class="vuoto"><b>Nessun movimento in ${nomeMese(meseCorrente)}</b>Gli importi reali delle voci li inserisci da questa pagina; il + in basso serve per le spese fuori stima.</div></section>`;
+  let html='<section class="blocco">', g="";
+  mv.forEach(m=>{ if(m.data!==g){ g=m.data; html+=`<div class="giorno-sep">${dataBreve(m.data)}</div>`; } html+=rigaMovimento(m); });
+  return html+"</section>";
+}
+
+function vistaStorico(){
+  const o=new Date(), serie=[];
+  for(let i=11;i>=0;i--){
+    const mk=meseAdiacente(chiaveMese(o),-i), b=bilancio(mk);
+    serie.push({mk,e:b.realeE,u:b.realeU,se:b.stimaE,su:b.stimaU});
+  }
+  const max=Math.max(1,...serie.map(s=>Math.max(s.e,s.u)));
+  const conDati=serie.filter(s=>s.e||s.u);
+  const mediaU=conDati.length?conDati.reduce((s,x)=>s+x.u,0)/conDati.length:0;
+  const scartoMedio=conDati.length?conDati.reduce((s,x)=>s+(x.u-x.su),0)/conDati.length:0;
+  return `
+  <section class="blocco"><h2>Dodici mesi, importi reali</h2>
+    <div class="colonne">${serie.map(s=>`<div class="colonna"><div class="coppia">
+      <div class="e" style="height:${s.e/max*100}%"></div><div class="u" style="height:${s.u/max*100}%"></div>
+    </div></div>`).join("")}</div>
+    <div class="etichette">${serie.map(s=>`<span>${MESI[Number(s.mk.slice(5))-1][0].toUpperCase()}</span>`).join("")}</div>
+    <div class="legenda-storico"><span><i style="background:var(--entrata)"></i>entrate</span><span><i style="background:var(--uscita)"></i>uscite</span></div>
+  </section>
+  ${conDati.length?`<section class="blocco"><h2>Quanto ci prendi</h2>
+    <div class="cat-riga"><div class="cat-testa"><span>Uscite medie al mese</span><span class="num">${euro(mediaU)}</span></div></div>
+    <div class="cat-riga"><div class="cat-testa"><span>Scarto medio sulle stime</span>
+      <span class="num ${scartoMedio>0?"neg":"pos"}">${scartoMedio>0?"+":""}${euro(scartoMedio)}</span></div>
+      <div class="cat-testa"><span class="d">${scartoMedio>0?"Spendi più di quanto stimi: alza le stime o taglia dove lo scarto è maggiore.":"Le tue stime sono prudenti rispetto alla spesa reale."}</span></div></div>
+  </section>`:""}
+  <section class="blocco"><h2>Stima contro reale, voce per voce — ${nomeMese(meseCorrente)}</h2>
+  ${(()=>{const b=bilancio(meseCorrente);
+    const chiuse=b.righe.filter(x=>x.chiusa&&!x.periodica);
+    if(!chiuse.length) return '<div class="vuoto">Nessun importo reale inserito in questo mese.</div>';
+    const maxS=Math.max(...chiuse.map(x=>Math.abs(x.reale-x.stima)),1);
+    return chiuse.sort((a,c)=>Math.abs(c.reale-c.stima)-Math.abs(a.reale-a.stima)).map(x=>{
+      const d=x.reale-x.stima, male=(x.voce.tipo==="uscita"&&d>0)||(x.voce.tipo==="entrata"&&d<0);
+      return `<div class="cat-riga"><div class="cat-testa"><span>${esc(x.voce.nome)}</span>
+        <span class="num ${male?"neg":"pos"}">${d>0?"+":""}${euro(d)}</span></div>
+        <div class="cat-barra"><span style="width:${Math.abs(d)/maxS*100}%;background:${male?"var(--uscita)":"var(--entrata)"}"></span></div></div>`;
+    }).join("");})()}
+  </section>`;
+}
+
+function vistaObiettivi(){
+  const ob=dati.obiettivi||[];
+  const o=new Date(); let somma=0,conta=0;
+  for(let i=1;i<=6;i++){ const mk=meseAdiacente(chiaveMese(o),-i), b=bilancio(mk);
+    if(b.realeE||b.realeU){ somma+=b.realeE-b.realeU; conta++; } }
+  const media=conta?somma/conta:null;
+  return `
+  ${media!==null?`<section class="mese-barra"><div class="riepilogo" style="border:0;padding:0;margin:0">
+    <div><span class="et">Risparmio reale medio degli ultimi ${conta} mesi</span>
+    <span class="vl num ${media<0?"neg":"pos"}">${euro(media)}</span></div></div></section>`:""}
+  <section class="blocco"><h2>Obiettivi</h2>
+  ${ob.length?ob.map(o2=>{
+    const perc=Math.min(100,o2.accantonato/o2.target*100), manca=Math.max(0,o2.target-o2.accantonato);
+    let nota="", allerta=false;
+    if(manca===0) nota="Obiettivo raggiunto.";
+    else if(o2.scadenza){
+      const mesi=Math.max(0,(new Date(o2.scadenza)-new Date())/(1000*60*60*24*30.4));
+      const q=mesi>0?manca/mesi:manca;
+      nota="Servono "+euro(q)+" al mese per arrivarci entro "+new Date(o2.scadenza).toLocaleDateString("it-IT",{month:"long",year:"numeric"})+".";
+      if(media!==null&&q>media){ allerta=true; nota+=" Al ritmo attuale ne metti da parte "+euro(media)+"."; }
+    } else nota="Mancano "+euro(manca)+".";
+    return `<div class="ob"><div class="ob-testa"><span class="nome">${esc(o2.nome)}</span>
+      <span class="num">${euroCorto(o2.accantonato)} / ${euroCorto(o2.target)}</span></div>
+      <div class="ob-barra"><span style="width:${perc}%"></span></div>
+      <div class="ob-nota ${allerta?"allerta":""}">${esc(nota)}</div>
+      <div class="ob-azioni"><button data-accantona="${o2.id}">Accantona</button><button data-ob="${o2.id}">Modifica</button></div></div>`;
+  }).join(""):'<div class="vuoto"><b>Un obiettivo alla volta</b>Importo e data: calcolo quanto serve al mese e lo confronto con quello che riesci davvero a mettere da parte.</div>'}
+  </section>
+  <button class="primario" data-nuovo-ob style="margin-top:14px">Aggiungi un obiettivo</button>`;
+}
+
+/* ================= pannelli ================= */
+function apriPannello(html){ document.getElementById("foglio").innerHTML=html;
+  document.getElementById("pannello").hidden=false; collegaPannello(); }
+function chiudiPannello(){ document.getElementById("pannello").hidden=true; bozza=null; }
+
+/* inserimento dell'importo reale di una voce */
+function pannelloVoce(v){
+  const x=calcolaVoce(v,meseCorrente);
+  const esistente=(dati.movimenti||[]).find(m=>m.voceId===v.id&&meseDi(m.data)===meseCorrente);
+  bozza={voceId:v.id, movId:esistente?esistente.id:null, importo:x.reale||0,
+    data:esistente?esistente.data:dataNelMese(v.giorno||1,meseCorrente), stima:x.stima};
+  disegnaPannelloVoce(v,x);
+}
+function dataNelMese(giorno,mk){
+  const g=Math.min(giorno,giorniNelMese(mk));
+  return mk+"-"+String(g).padStart(2,"0");
+}
+function disegnaPannelloVoce(v,x){
+  const testo=bozza.importo?bozza.importo.toLocaleString("it-IT",{minimumFractionDigits:2,maximumFractionDigits:2}):"0,00";
+  const d=bozza.importo?bozza.importo-bozza.stima:0;
+  apriPannello(`
+  <div class="foglio-testa"><h3>${esc(v.nome)} · ${nomeMese(meseCorrente)}</h3><button data-chiudi>Chiudi</button></div>
+  <p class="nota-foglio">${x.periodica
+    ? `Voce periodica: ogni mese accantoni ${euro(x.stima)}, nel fondo ci sono ${euro(x.fondo)}. Inserisci qui l'importo quando lo paghi davvero.`
+    : `Stima di questo mese ${euro(bozza.stima)}. Inserisci l'importo reale quando lo conosci.`}</p>
+  <div class="display"><div class="cifra num">${testo} €</div>
+    ${bozza.importo?`<div class="sotto">${Math.abs(d)<0.5?"in linea con la stima":(d>0?"+":"−")+euro(Math.abs(d)).replace("−","")+" rispetto alla stima"}</div>`:'<div class="sotto">importo reale</div>'}</div>
+  <div class="tastierino">
+    ${[1,2,3,4,5,6,7,8,9].map(n=>`<button data-tasto="${n}">${n}</button>`).join("")}
+    <button data-tasto="00">00</button><button data-tasto="0">0</button><button data-tasto="del">⌫</button>
+  </div>
+  <label class="campo"><span>Data del movimento</span><input type="date" data-vdata value="${bozza.data}"></label>
+  <button class="primario" data-salva-reale ${bozza.importo?"":"disabled"}>Salva importo reale</button>
+  ${!x.periodica?`<button class="secondario" data-usa-stima>Era esattamente la stima (${euro(bozza.stima)})</button>`:""}
+  <button class="secondario" data-ritocca>Ritocca la stima di questo mese</button>
+  ${bozza.movId?'<button class="distruttivo" data-togli-reale>Togli l\'importo reale</button>':""}`);
+}
+function pannelloRitocca(v){
+  const s=stimaMese(v,meseCorrente), base=quota(v);
+  apriPannello(`
+  <div class="foglio-testa"><h3>Stima di ${nomeMese(meseCorrente)}</h3><button data-chiudi>Chiudi</button></div>
+  <p class="nota-foglio">Cambia la stima solo per questo mese. La stima generale resta a ${euro(base)}.</p>
+  <label class="campo"><span>${esc(v.nome)}</span><input type="number" inputmode="decimal" step="0.01" id="nuovaStima" value="${s}"></label>
+  <button class="primario" data-salva-stima="${v.id}">Salva la stima del mese</button>
+  ${dati.stime[v.id+":"+meseCorrente]!=null?`<button class="secondario" data-reset-stima="${v.id}">Torna alla stima generale</button>`:""}`);
+}
+function pannelloNuovaVoce(v){
+  bozza = v ? Object.assign({},v)
+    : {id:null,nome:"",tipo:"uscita",categoria:"Bollette",importo:0,cadenza:1,giorno:1,meseRif:new Date().getMonth()+1,inizio:null,attiva:true};
+  const cat=bozza.tipo==="entrata"?CAT_ENTRATA:CAT_USCITA;
+  apriPannello(`
+  <div class="foglio-testa"><h3>${bozza.id?"Modifica voce":"Nuova voce delle stime"}</h3><button data-chiudi>Chiudi</button></div>
+  <div class="tipo-switch">
+    <button data-vtipo="uscita" aria-pressed="${bozza.tipo==="uscita"}">Uscita</button>
+    <button data-vtipo="entrata" aria-pressed="${bozza.tipo==="entrata"}">Entrata</button>
+  </div>
+  <label class="campo"><span>Nome</span><input type="text" data-v="nome" value="${esc(bozza.nome)}" placeholder="Stipendio, affitto, spesa, assicurazione…"></label>
+  <div class="doppio">
+    <label class="campo"><span>Importo stimato</span><input type="number" inputmode="decimal" step="0.01" data-v="importo" value="${bozza.importo||""}"></label>
+    <label class="campo"><span>Ogni quanto</span><select data-v="cadenza">${CADENZE.map(c=>`<option value="${c.n}" ${bozza.cadenza===c.n?"selected":""}>${c.e}</option>`).join("")}</select></label>
+  </div>
+  <p class="nota-foglio" id="notaQuota"></p>
+  <div class="doppio">
+    <label class="campo"><span>Categoria</span><select data-v="categoria">${cat.map(c=>`<option ${bozza.categoria===c?"selected":""}>${esc(c)}</option>`).join("")}</select></label>
+    <label class="campo" id="campoMese" ${bozza.cadenza>1?"":"hidden"}><span>Mese di pagamento</span>
+      <select data-v="meseRif">${MESI.map((m,i)=>`<option value="${i+1}" ${bozza.meseRif===i+1?"selected":""}>${m}</option>`).join("")}</select></label>
+    <label class="campo" id="campoGiorno" ${bozza.cadenza>1?"hidden":""}><span>Giorno del mese</span>
+      <input type="number" inputmode="numeric" min="1" max="31" data-v="giorno" value="${bozza.giorno||1}"></label>
+  </div>
+  <label class="campo"><span>Stato</span><select data-v="attiva">
+    <option value="si" ${bozza.attiva!==false?"selected":""}>Attiva</option>
+    <option value="no" ${bozza.attiva===false?"selected":""}>In pausa</option></select></label>
+  <button class="primario" data-salva-voce>Salva voce</button>
+  ${bozza.id?'<button class="distruttivo" data-elimina-voce>Elimina la voce</button>':""}`);
+  aggiornaNotaQuota();
+}
+function aggiornaNotaQuota(){
+  const f=document.getElementById("foglio"); if(!f) return;
+  const n=document.getElementById("notaQuota"); if(!n) return;
+  const imp=numero((f.querySelector('[data-v="importo"]')||{}).value);
+  const cad=Number((f.querySelector('[data-v="cadenza"]')||{}).value||1);
+  n.textContent = cad>1 && imp
+    ? `Nel mese pesa ${euro(imp/cad)}: li accantono ogni mese e quando paghi scalo dal fondo.`
+    : "";
+}
+function pannelloMovimentoLibero(m){
+  bozza = m ? Object.assign({},m) : {id:null,tipo:"uscita",importo:0,categoria:"Spesa",data:oggiISO(),nota:"",voceId:null};
+  disegnaPannelloMovimento();
+}
+function disegnaPannelloMovimento(){
+  const cat=bozza.tipo==="entrata"?CAT_ENTRATA:CAT_USCITA;
+  if(!cat.includes(bozza.categoria)) bozza.categoria=cat[0];
+  const testo=bozza.importo?bozza.importo.toLocaleString("it-IT",{minimumFractionDigits:2,maximumFractionDigits:2}):"0,00";
+  const voci=vociAttive().filter(v=>v.tipo===bozza.tipo);
+  apriPannello(`
+  <div class="foglio-testa"><h3>${bozza.id?"Modifica movimento":"Spesa fuori stima"}</h3><button data-chiudi>Chiudi</button></div>
+  <div class="tipo-switch">
+    <button data-tipo="uscita" aria-pressed="${bozza.tipo==="uscita"}">Uscita</button>
+    <button data-tipo="entrata" aria-pressed="${bozza.tipo==="entrata"}">Entrata</button>
+  </div>
+  <div class="display"><div class="cifra num">${testo} €</div></div>
+  <div class="tastierino">
+    ${[1,2,3,4,5,6,7,8,9].map(n=>`<button data-tasto="${n}">${n}</button>`).join("")}
+    <button data-tasto="00">00</button><button data-tasto="0">0</button><button data-tasto="del">⌫</button>
+  </div>
+  <div class="chips">${cat.map(c=>`<button class="chip" data-cat="${esc(c)}" aria-pressed="${bozza.categoria===c}">${esc(c)}</button>`).join("")}</div>
+  <div class="doppio">
+    <label class="campo"><span>Data</span><input type="date" data-campo="data" value="${bozza.data}"></label>
+    <label class="campo"><span>Nota</span><input type="text" data-campo="nota" value="${esc(bozza.nota||"")}" placeholder="facoltativa"></label>
+  </div>
+  <label class="campo"><span>Voce delle stime</span><select data-campo="voceId">
+    <option value="">Fuori stima</option>
+    ${voci.map(v=>`<option value="${v.id}" ${bozza.voceId===v.id?"selected":""}>${esc(v.nome)}</option>`).join("")}
+  </select></label>
+  <button class="primario" data-salva-mov ${bozza.importo?"":"disabled"}>Salva movimento</button>
+  ${bozza.id?'<button class="distruttivo" data-elimina-mov>Elimina</button>':""}`);
+}
+function pannelloObiettivo(o){
+  bozza = o ? Object.assign({},o) : {id:null,nome:"",target:0,accantonato:0,scadenza:""};
+  apriPannello(`
+  <div class="foglio-testa"><h3>${bozza.id?"Modifica obiettivo":"Nuovo obiettivo"}</h3><button data-chiudi>Chiudi</button></div>
+  <label class="campo"><span>Nome</span><input type="text" data-o="nome" value="${esc(bozza.nome)}" placeholder="Fondo emergenza, vacanza, auto…"></label>
+  <div class="doppio">
+    <label class="campo"><span>Obiettivo</span><input type="number" inputmode="decimal" step="0.01" data-o="target" value="${bozza.target||""}"></label>
+    <label class="campo"><span>Già accantonato</span><input type="number" inputmode="decimal" step="0.01" data-o="accantonato" value="${bozza.accantonato||""}"></label>
+  </div>
+  <label class="campo"><span>Entro quando (facoltativo)</span><input type="date" data-o="scadenza" value="${bozza.scadenza||""}"></label>
+  <button class="primario" data-salva-ob>Salva obiettivo</button>
+  ${bozza.id?'<button class="distruttivo" data-elimina-ob>Elimina</button>':""}`);
+}
+function pannelloAccantona(o){
+  apriPannello(`
+  <div class="foglio-testa"><h3>Accantona per ${esc(o.nome)}</h3><button data-chiudi>Chiudi</button></div>
+  <label class="campo"><span>Quanto metti da parte</span><input type="number" inputmode="decimal" step="0.01" id="impAcc" placeholder="0,00"></label>
+  <label class="campo"><span><input type="checkbox" id="accMov" checked style="width:auto;margin-right:7px">Registralo anche come uscita della categoria Risparmio</span></label>
+  <button class="primario" data-conferma-acc="${o.id}">Accantona</button>`);
+}
+function pannelloImpostazioni(){
+  apriPannello(`
+  <div class="foglio-testa"><h3>Impostazioni</h3><button data-chiudi>Chiudi</button></div>
+  <p class="nota-foglio">I dati restano su questo dispositivo e, se compili i campi qui sotto, vengono salvati in un file JSON su un tuo repository GitHub privato. Il token non lascia il dispositivo: non finisce nel file sincronizzato.</p>
+  <div class="doppio">
+    <label class="campo"><span>Utente o organizzazione</span><input type="text" data-s="owner" value="${esc(sync.owner)}" autocapitalize="off" autocorrect="off"></label>
+    <label class="campo"><span>Repository</span><input type="text" data-s="repo" value="${esc(sync.repo)}" autocapitalize="off" autocorrect="off"></label>
+  </div>
+  <div class="doppio">
+    <label class="campo"><span>Percorso del file</span><input type="text" data-s="percorso" value="${esc(sync.percorso)}" autocapitalize="off" autocorrect="off"></label>
+    <label class="campo"><span>Ramo</span><input type="text" data-s="ramo" value="${esc(sync.ramo)}" autocapitalize="off" autocorrect="off"></label>
+  </div>
+  <label class="campo"><span>Token GitHub (permesso Contents: read and write)</span><input type="password" data-s="token" value="${esc(sync.token)}" autocapitalize="off" autocorrect="off" placeholder="github_pat_…"></label>
+  <button class="primario" data-salva-imp>Salva e sincronizza</button>
+  <button class="secondario" data-tira>Scarica i dati dal repository</button>
+  <button class="secondario" data-esporta>Esporta una copia JSON</button>
+  <button class="secondario" data-importa>Importa da file JSON</button>
+  <input type="file" id="fileImporta" accept="application/json,.json" hidden>`);
+}
+
+/* ================= eventi ================= */
+function collega(){
+  document.querySelectorAll("[data-vai]").forEach(b=>b.onclick=()=>cambiaVista(b.dataset.vai));
+  document.querySelectorAll("[data-voce]").forEach(b=>b.onclick=()=>{
+    const v=dati.voci.find(x=>x.id===b.dataset.voce); if(v) pannelloVoce(v); });
+  document.querySelectorAll("[data-mod-voce]").forEach(b=>b.onclick=()=>{
+    const v=dati.voci.find(x=>x.id===b.dataset.modVoce); if(v) pannelloNuovaVoce(v); });
+  document.querySelectorAll("[data-mov]").forEach(b=>b.onclick=()=>{
+    const m=dati.movimenti.find(x=>x.id===b.dataset.mov); if(m) pannelloMovimentoLibero(m); });
+  const nv=document.querySelector("[data-nuova-voce]"); if(nv) nv.onclick=()=>pannelloNuovaVoce(null);
+  const no=document.querySelector("[data-nuovo-ob]"); if(no) no.onclick=()=>pannelloObiettivo(null);
+  document.querySelectorAll("[data-ob]").forEach(b=>b.onclick=()=>{
+    const o=dati.obiettivi.find(x=>x.id===b.dataset.ob); if(o) pannelloObiettivo(o); });
+  document.querySelectorAll("[data-accantona]").forEach(b=>b.onclick=()=>{
+    const o=dati.obiettivi.find(x=>x.id===b.dataset.accantona); if(o) pannelloAccantona(o); });
+}
+
+function collegaPannello(){
+  const f=document.getElementById("foglio");
+  const c=f.querySelector("[data-chiudi]"); if(c) c.onclick=chiudiPannello;
+
+  /* tastierino condiviso */
+  f.querySelectorAll("[data-tasto]").forEach(b=>b.onclick=()=>{
+    if(f.querySelector("[data-salva-reale]")) leggiVoce(); else leggiCampiMov();
+    let cent=Math.round(bozza.importo*100), t=b.dataset.tasto;
+    cent = t==="del" ? Math.floor(cent/10) : Number(String(cent)+t);
+    if(cent>99999999) return;
+    bozza.importo=cent/100;
+    if(f.querySelector("[data-salva-reale]")){
+      const v=dati.voci.find(x=>x.id===bozza.voceId);
+      disegnaPannelloVoce(v,calcolaVoce(v,meseCorrente));
+    } else disegnaPannelloMovimento();
+  });
+
+  /* voce: importo reale */
+  const sr=f.querySelector("[data-salva-reale]"); if(sr) sr.onclick=salvaReale;
+  const us=f.querySelector("[data-usa-stima]"); if(us) us.onclick=()=>{ leggiVoce(); bozza.importo=bozza.stima; salvaReale(); };
+  const rt=f.querySelector("[data-ritocca]"); if(rt) rt.onclick=()=>pannelloRitocca(dati.voci.find(x=>x.id===bozza.voceId));
+  const tr=f.querySelector("[data-togli-reale]"); if(tr) tr.onclick=()=>{
+    dati.movimenti=dati.movimenti.filter(m=>m.id!==bozza.movId);
+    salva(); chiudiPannello(); disegna(); toast("Importo reale rimosso"); };
+
+  /* stima del mese */
+  const ss=f.querySelector("[data-salva-stima]"); if(ss) ss.onclick=()=>{
+    const v=ss.dataset.salvaStima, n=numero(document.getElementById("nuovaStima").value);
+    dati.stime[v+":"+meseCorrente]=n; salva(); chiudiPannello(); disegna(); toast("Stima del mese aggiornata"); };
+  const rs=f.querySelector("[data-reset-stima]"); if(rs) rs.onclick=()=>{
+    delete dati.stime[rs.dataset.resetStima+":"+meseCorrente];
+    salva(); chiudiPannello(); disegna(); toast("Stima riportata al valore generale"); };
+
+  /* voce delle stime */
+  f.querySelectorAll("[data-vtipo]").forEach(b=>b.onclick=()=>{
+    leggiVoceForm(); bozza.tipo=b.dataset.vtipo;
+    bozza.categoria=(bozza.tipo==="entrata"?CAT_ENTRATA:CAT_USCITA)[0]; pannelloNuovaVoce(bozza); });
+  const cad=f.querySelector('[data-v="cadenza"]');
+  if(cad) cad.onchange=()=>{
+    const p=Number(cad.value)>1;
+    document.getElementById("campoMese").hidden=!p;
+    document.getElementById("campoGiorno").hidden=p;
+    aggiornaNotaQuota(); };
+  const imp=f.querySelector('[data-v="importo"]'); if(imp) imp.oninput=aggiornaNotaQuota;
+  const sv=f.querySelector("[data-salva-voce]"); if(sv) sv.onclick=salvaVoce;
+  const ev=f.querySelector("[data-elimina-voce]"); if(ev) ev.onclick=()=>{
+    if(!confirm("Eliminare questa voce? I movimenti già registrati restano, come fuori stima.")) return;
+    dati.voci=dati.voci.filter(x=>x.id!==bozza.id);
+    dati.movimenti.forEach(m=>{ if(m.voceId===bozza.id) m.voceId=null; });
+    salva(); chiudiPannello(); disegna(); toast("Voce eliminata"); };
+
+  /* movimento libero */
+  f.querySelectorAll("[data-tipo]").forEach(b=>b.onclick=()=>{ leggiCampiMov(); bozza.tipo=b.dataset.tipo; disegnaPannelloMovimento(); });
+  f.querySelectorAll("[data-cat]").forEach(b=>b.onclick=()=>{ leggiCampiMov(); bozza.categoria=b.dataset.cat; disegnaPannelloMovimento(); });
+  const sm=f.querySelector("[data-salva-mov]"); if(sm) sm.onclick=salvaMovimento;
+  const em=f.querySelector("[data-elimina-mov]"); if(em) em.onclick=()=>{
+    if(!confirm("Eliminare questo movimento?")) return;
+    dati.movimenti=dati.movimenti.filter(x=>x.id!==bozza.id);
+    salva(); chiudiPannello(); disegna(); toast("Movimento eliminato"); };
+
+  /* obiettivi */
+  const so=f.querySelector("[data-salva-ob]"); if(so) so.onclick=salvaObiettivo;
+  const eo=f.querySelector("[data-elimina-ob]"); if(eo) eo.onclick=()=>{
+    if(!confirm("Eliminare questo obiettivo?")) return;
+    dati.obiettivi=dati.obiettivi.filter(x=>x.id!==bozza.id);
+    salva(); chiudiPannello(); disegna(); toast("Obiettivo eliminato"); };
+  const ca=f.querySelector("[data-conferma-acc]"); if(ca) ca.onclick=()=>confermaAccantona(ca.dataset.confermaAcc);
+
+  /* impostazioni */
+  const si=f.querySelector("[data-salva-imp]"); if(si) si.onclick=()=>{
+    f.querySelectorAll("[data-s]").forEach(i=>{ sync[i.dataset.s]=i.value.trim(); });
+    sync.sha=null; salvaSync(); chiudiPannello();
+    if(configurato()) tiraDaGitHub(true).then(spingiSuGitHub);
+    else statoSync("","Solo su questo dispositivo"); };
+  const tg=f.querySelector("[data-tira]"); if(tg) tg.onclick=()=>{ chiudiPannello(); dati.aggiornato=0; tiraDaGitHub(); };
+  const ex=f.querySelector("[data-esporta]"); if(ex) ex.onclick=esporta;
+  const im=f.querySelector("[data-importa]"); if(im) im.onclick=()=>document.getElementById("fileImporta").click();
+  const fi=document.getElementById("fileImporta"); if(fi) fi.onchange=importa;
+}
+
+function leggiVoce(){ const d=document.querySelector("[data-vdata]"); if(d&&d.value) bozza.data=d.value; }
+function leggiCampiMov(){
+  const f=document.getElementById("foglio");
+  const d=f.querySelector('[data-campo="data"]'), n=f.querySelector('[data-campo="nota"]'), v=f.querySelector('[data-campo="voceId"]');
+  if(d&&d.value) bozza.data=d.value;
+  if(n) bozza.nota=n.value;
+  if(v) bozza.voceId=v.value||null;
+}
+function leggiVoceForm(){
+  const f=document.getElementById("foglio");
+  f.querySelectorAll("[data-v]").forEach(i=>{
+    const k=i.dataset.v;
+    if(k==="importo") bozza.importo=numero(i.value);
+    else if(k==="cadenza") bozza.cadenza=Number(i.value)||1;
+    else if(k==="giorno") bozza.giorno=Math.min(31,Math.max(1,Number(i.value)||1));
+    else if(k==="meseRif") bozza.meseRif=Number(i.value)||1;
+    else if(k==="attiva") bozza.attiva=i.value==="si";
+    else bozza[k]=i.value;
+  });
+}
+function salvaReale(){
+  leggiVoce();
+  if(!bozza.importo){ toast("Inserisci un importo"); return; }
+  const v=dati.voci.find(x=>x.id===bozza.voceId);
+  if(bozza.movId){
+    const m=dati.movimenti.find(x=>x.id===bozza.movId);
+    m.importo=bozza.importo; m.data=bozza.data;
+  } else {
+    dati.movimenti.push({id:id(),data:bozza.data,importo:bozza.importo,tipo:v.tipo,
+      categoria:v.categoria,nota:v.nome,voceId:v.id});
+  }
+  salva(); chiudiPannello(); disegna(); toast("Importo reale salvato");
+}
+function salvaVoce(){
+  leggiVoceForm();
+  if(!bozza.nome.trim()){ toast("Dai un nome alla voce"); return; }
+  if(!bozza.importo){ toast("Inserisci un importo stimato"); return; }
+  if(bozza.id){
+    const i=dati.voci.findIndex(x=>x.id===bozza.id);
+    dati.voci[i]=Object.assign(dati.voci[i],bozza);
+  } else {
+    bozza.id=id(); bozza.inizio=meseCorrente; dati.voci.push(bozza);
+  }
+  salva(); chiudiPannello(); disegna(); toast("Voce salvata");
+}
+function salvaMovimento(){
+  leggiCampiMov();
+  if(!bozza.importo){ toast("Inserisci un importo"); return; }
+  if(bozza.id){
+    const i=dati.movimenti.findIndex(x=>x.id===bozza.id);
+    dati.movimenti[i]=Object.assign(dati.movimenti[i],bozza);
+  } else { bozza.id=id(); dati.movimenti.push(bozza); }
+  meseCorrente=meseDi(bozza.data);
+  salva(); chiudiPannello(); disegna(); toast("Movimento salvato");
+}
+function salvaObiettivo(){
+  const f=document.getElementById("foglio");
+  f.querySelectorAll("[data-o]").forEach(i=>{
+    const k=i.dataset.o;
+    bozza[k]=(k==="target"||k==="accantonato")?numero(i.value):i.value; });
+  if(!bozza.nome.trim()){ toast("Dai un nome all'obiettivo"); return; }
+  if(!bozza.target){ toast("Inserisci l'importo da raggiungere"); return; }
+  if(bozza.id){
+    const i=dati.obiettivi.findIndex(x=>x.id===bozza.id);
+    dati.obiettivi[i]=Object.assign(dati.obiettivi[i],bozza);
+  } else { bozza.id=id(); dati.obiettivi.push(bozza); }
+  salva(); chiudiPannello(); disegna(); toast("Obiettivo salvato");
+}
+function confermaAccantona(obId){
+  const o=dati.obiettivi.find(x=>x.id===obId); if(!o) return;
+  const imp=numero(document.getElementById("impAcc").value);
+  if(!imp){ toast("Inserisci un importo"); return; }
+  o.accantonato=(o.accantonato||0)+imp;
+  if(document.getElementById("accMov").checked){
+    dati.movimenti.push({id:id(),data:oggiISO(),importo:imp,tipo:"uscita",
+      categoria:"Risparmio",nota:"Accantonamento: "+o.nome,voceId:null,obiettivoId:o.id});
+  }
+  salva(); chiudiPannello(); disegna(); toast("Accantonati "+euro(imp));
+}
+function esporta(){
+  const b=new Blob([JSON.stringify(dati,null,2)],{type:"application/json"});
+  const a=document.createElement("a");
+  a.href=URL.createObjectURL(b); a.download="finanze-"+oggiISO()+".json"; a.click();
+  setTimeout(()=>URL.revokeObjectURL(a.href),1000);
+}
+function importa(e){
+  const file=e.target.files[0]; if(!file) return;
+  const r=new FileReader();
+  r.onload=()=>{
+    try{
+      const j=migra(JSON.parse(r.result));
+      if(!j.movimenti&&!j.voci) throw new Error("file non riconosciuto");
+      if(!confirm("Sostituire i dati attuali con quelli del file?")) return;
+      dati=Object.assign({voci:[],movimenti:[],stime:{},obiettivi:[]},j);
+      salva(); chiudiPannello(); disegna(); toast("Dati importati");
+    }catch(err){ toast("File non valido: "+err.message); }
+  };
+  r.readAsText(file);
+}
+function cambiaVista(v){
+  vistaAttiva=v;
+  document.querySelectorAll("nav button").forEach(b=>{
+    if(b.dataset.vista===v) b.setAttribute("aria-current","page"); else b.removeAttribute("aria-current"); });
+  disegna(); window.scrollTo(0,0);
+}
+
+/* ================= avvio ================= */
+document.querySelectorAll("nav button").forEach(b=>b.onclick=()=>cambiaVista(b.dataset.vista));
+document.getElementById("meseGiu").onclick=()=>{ meseCorrente=meseAdiacente(meseCorrente,-1); disegna(); };
+document.getElementById("meseSu").onclick=()=>{ meseCorrente=meseAdiacente(meseCorrente,1); disegna(); };
+document.getElementById("btnAggiungi").onclick=()=>pannelloMovimentoLibero(null);
+document.getElementById("apriImpostazioni").onclick=pannelloImpostazioni;
+document.getElementById("pannello").onclick=e=>{ if(e.target.id==="pannello") chiudiPannello(); };
+document.addEventListener("keydown",e=>{ if(e.key==="Escape") chiudiPannello(); });
+
+carica();
+disegna();
+if(configurato()){ statoSync("wait","Sincronizzazione…"); tiraDaGitHub(true); }
+else statoSync("","Solo su questo dispositivo");
+document.addEventListener("visibilitychange",()=>{ if(!document.hidden&&configurato()) tiraDaGitHub(true); });
+</script>
+</body>
+</html>
