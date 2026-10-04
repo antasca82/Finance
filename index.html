@@ -194,7 +194,7 @@ nav button[aria-current="page"] .g{opacity:1}
   <button data-vista="stime"><svg class="g" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M5 3h14v18l-3-2-2 2-2-2-2 2-2-2-3 2z"/><path d="M9 8h6M9 12h6"/></svg>Stime</button>
   <button data-vista="movimenti"><svg class="g" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 7h16M4 12h16M4 17h10"/></svg>Movimenti</button>
   <button data-vista="storico"><svg class="g" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>Storico</button>
-  <button data-vista="obiettivi"><svg class="g" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4"/></svg>Obiettivi</button>
+  <button data-vista="risparmi"><svg class="g" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4"/></svg>Risparmi</button>
 </div></nav>
 
 <div class="pannello" id="pannello" hidden><div class="foglio" id="foglio"></div></div>
@@ -211,7 +211,7 @@ const CAT_ENTRATA=["Stipendio","Extra","Rimborsi","Altro"];
 const CADENZE=[{n:1,e:"Ogni mese"},{n:2,e:"Ogni 2 mesi"},{n:3,e:"Ogni 3 mesi"},{n:4,e:"Ogni 4 mesi"},{n:6,e:"Ogni 6 mesi"},{n:12,e:"Una volta l'anno"}];
 
 /* ================= stato ================= */
-let dati={ voci:[], movimenti:[], stime:{}, obiettivi:[], aggiornato:0 };
+let dati={ voci:[], movimenti:[], stime:{}, obiettivi:[], salvadanaio:[], chiusure:{}, investimenti:[], aggiornato:0 };
 let sync={ owner:"", repo:"", percorso:"finanze.json", ramo:"main", token:"", sha:null, ultimo:0 };
 let vistaAttiva="mese";
 let meseCorrente=chiaveMese(new Date());
@@ -251,6 +251,8 @@ function carica(){
   try{ const s=localStorage.getItem(CHIAVE_SYNC); if(s) sync=Object.assign(sync,JSON.parse(s)); }catch(e){}
   if(!dati.voci) dati.voci=[]; if(!dati.stime) dati.stime={};
   if(!dati.movimenti) dati.movimenti=[]; if(!dati.obiettivi) dati.obiettivi=[];
+  if(!dati.salvadanaio) dati.salvadanaio=[]; if(!dati.chiusure) dati.chiusure={};
+  if(!dati.investimenti) dati.investimenti=[];
 }
 function salva(){
   dati.aggiornato=Date.now();
@@ -280,7 +282,7 @@ async function tiraDaGitHub(silenzioso){
     const j=await r.json(); sync.sha=j.sha;
     const remoto=migra(JSON.parse(b64aTesto(j.content)));
     if((remoto.aggiornato||0)>(dati.aggiornato||0)){
-      dati=Object.assign({voci:[],movimenti:[],stime:{},obiettivi:[]},remoto);
+      dati=Object.assign({voci:[],movimenti:[],stime:{},obiettivi:[],salvadanaio:[],chiusure:{},investimenti:[]},remoto);
       localStorage.setItem(CHIAVE,JSON.stringify(dati));
       disegna(); if(!silenzioso) toast("Dati aggiornati dal repository");
     }
@@ -368,6 +370,28 @@ function bilancio(mk){
     get libero(){ return this.previstoE-this.previstoU; }
   };
 }
+function avanzoMese(mk){ const b=bilancio(mk); return b.realeE-b.realeU; }
+function saldoSalvadanaio(){ return (dati.salvadanaio||[]).reduce((t,r)=>t+r.importo,0); }
+function meseChiuso(mk){ return !!(dati.chiusure&&dati.chiusure[mk]); }
+function mesiDaChiudere(){
+  const ora=chiaveMese(new Date()), visti={};
+  (dati.movimenti||[]).forEach(m=>{ const k=meseDi(m.data); if(k<ora) visti[k]=true; });
+  return Object.keys(visti).filter(k=>!meseChiuso(k)).sort();
+}
+function chiudiMese(mk){
+  const a=avanzoMese(mk);
+  let importo=a, parziale=0;
+  if(a<0){
+    const disp=Math.max(0,saldoSalvadanaio());
+    importo=-Math.min(disp,-a);
+    parziale=(-a)-(-importo);
+  }
+  if(Math.abs(importo)>=0.005)
+    dati.salvadanaio.push({id:id(),data:oggiISO(),mese:mk,importo,tipo:"chiusura"});
+  dati.chiusure[mk]="chiuso";
+  salva();
+  return parziale;
+}
 function giorniRimanenti(mk){
   const o=new Date(), mo=chiaveMese(o);
   if(mk<mo) return 0; if(mk>mo) return giorniNelMese(mk);
@@ -382,7 +406,7 @@ function disegna(){
   v.innerHTML = vistaAttiva==="mese"?vistaMese()
     : vistaAttiva==="stime"?vistaStime()
     : vistaAttiva==="movimenti"?vistaMovimenti()
-    : vistaAttiva==="storico"?vistaStorico() : vistaObiettivi();
+    : vistaAttiva==="storico"?vistaStorico() : vistaRisparmi();
   collega();
 }
 
@@ -424,7 +448,7 @@ function vistaMese(){
       </div></button>`;
   };
 
-  return `
+  return avvisoChiusura() + `
   <section class="mese-barra">
     <div class="barra">
       <div class="seg speso" style="width:${pSpeso}%"></div>
@@ -476,6 +500,14 @@ function vistaMese(){
   </section>`;
 }
 
+function avvisoChiusura(){
+  const ms=mesiDaChiudere(); if(!ms.length) return "";
+  const mk=ms[0], a=avanzoMese(mk);
+  if(Math.abs(a)<0.005){ return ""; }
+  return `<div class="avviso">${nomeMese(mk)} si è chiuso con ${a>=0?"un avanzo di <b>"+euro(a)+"</b>":"un disavanzo di <b>"+euro(-a)+"</b>"}.
+    <button data-chiudi-mese="${mk}">${a>=0?"Mettilo nel salvadanaio":"Coprilo dal salvadanaio"}</button> ·
+    <button data-salta-mese="${mk}">lascia stare</button></div>`;
+}
 function rigaMovimento(m){
   const v=dati.voci.find(x=>x.id===m.voceId);
   return `<button class="riga" data-mov="${m.id}">
@@ -555,17 +587,60 @@ function vistaStorico(){
   </section>`;
 }
 
-function vistaObiettivi(){
+function etichettaSalvadanaio(r){
+  if(r.tipo==="chiusura") return (r.importo>=0?"Avanzo di ":"Copertura di ")+nomeMese(r.mese);
+  if(r.tipo==="obiettivo") return "Spostato su "+(r.nota||"un obiettivo");
+  if(r.tipo==="investimento") return r.nota||"Investimento";
+  return r.nota||(r.importo>=0?"Versamento":"Prelievo");
+}
+function vistaRisparmi(){
+  const saldo=saldoSalvadanaio();
+  const righe=(dati.salvadanaio||[]).slice().sort((a,b)=>b.data.localeCompare(a.data)).slice(0,8);
+  const inv=dati.investimenti||[];
+  const aperti=inv.filter(i=>i.stato!=="chiuso"), chiusi=inv.filter(i=>i.stato==="chiuso");
+  const capitale=aperti.reduce((t,i)=>t+i.importo,0);
+  const risultato=chiusi.reduce((t,i)=>t+(i.valore-i.importo),0);
+  return `
+  <section class="mese-barra">
+    <div class="riepilogo" style="border:0;padding:0;margin:0">
+      <div><span class="et">Salvadanaio</span><span class="vl num ${saldo<0?"neg":""}">${euro(saldo)}</span></div>
+      ${capitale?`<div><span class="et">Investito</span><span class="vl num">${euro(capitale)}</span></div>`:""}
+    </div>
+    <div style="display:flex;gap:8px;margin-top:14px">
+      <button class="secondario" style="margin:0" data-salvad="manuale">Versa o preleva</button>
+      <button class="secondario" style="margin:0" data-salvad="obiettivo">Sposta su un obiettivo</button>
+    </div>
+  </section>
+  ${avvisoChiusura()}
+  ${righe.length?`<section class="blocco"><h2>Movimenti del salvadanaio</h2>
+    ${righe.map(r=>`<div class="riga"><div class="pittogramma">${r.importo>=0?"+":"−"}</div>
+      <div class="corpo"><div class="titolo">${esc(etichettaSalvadanaio(r))}</div><div class="sotto">${dataBreve(r.data)}</div></div>
+      <div class="cifra num ${r.importo>=0?"pos":"neg"}">${r.importo>=0?"+":"−"}${euro(Math.abs(r.importo))}</div></div>`).join("")}
+    </section>`:`<section class="blocco"><div class="vuoto"><b>Qui finisce quello che avanza</b>Alla fine di ogni mese ti chiedo se mettere l'avanzo nel salvadanaio. Nei mesi pesanti lo stesso pulsante attinge da qui invece di farti chiudere in rosso.</div></section>`}
+  ${bloccoObiettivi()}
+  <section class="blocco"><h2>Investimenti${chiusi.length?` <span class="q">risultato ${risultato>=0?"+":"−"}${euroCorto(Math.abs(risultato))}</span>`:""}</h2>
+  ${aperti.map(i=>`<button class="voce" data-inv="${i.id}">
+    <div class="corpo"><div class="nome">${esc(i.nome)}</div><div class="sotto">aperto il ${dataBreve(i.dataApertura)}</div></div>
+    <div class="numeri"><div class="principale num">${euro(i.importo)}</div><div class="secondario">in corso</div></div></button>`).join("")}
+  ${chiusi.slice().sort((a,b)=>(b.dataChiusura||"").localeCompare(a.dataChiusura||"")).slice(0,6).map(i=>{
+    const r=i.valore-i.importo;
+    return `<button class="voce" data-inv="${i.id}" style="opacity:.7">
+      <div class="corpo"><div class="nome">${esc(i.nome)}</div>
+        <div class="sotto">chiuso il ${dataBreve(i.dataChiusura)} · ${euroCorto(i.importo)} → ${euroCorto(i.valore)}</div></div>
+      <div class="numeri"><div class="principale num ${r>=0?"pos":"neg"}">${r>=0?"+":"−"}${euro(Math.abs(r))}</div>
+        <div class="secondario">${i.importo?((r/i.importo*100).toFixed(1).replace(".",",")+"%"):""}</div></div></button>`;}).join("")}
+  ${!inv.length?'<div class="vuoto"><b>Il capitale non è una spesa</b>Quando apri una posizione il denaro si sposta soltanto, quindi non tocca il budget del mese. Alla chiusura registro solo il guadagno o la perdita.</div>':""}
+  </section>
+  <button class="primario" data-nuovo-inv style="margin-top:14px">Nuovo investimento</button>`;
+}
+function bloccoObiettivi(){
   const ob=dati.obiettivi||[];
   const o=new Date(); let somma=0,conta=0;
   for(let i=1;i<=6;i++){ const mk=meseAdiacente(chiaveMese(o),-i), b=bilancio(mk);
     if(b.realeE||b.realeU){ somma+=b.realeE-b.realeU; conta++; } }
   const media=conta?somma/conta:null;
   return `
-  ${media!==null?`<section class="mese-barra"><div class="riepilogo" style="border:0;padding:0;margin:0">
-    <div><span class="et">Risparmio reale medio degli ultimi ${conta} mesi</span>
-    <span class="vl num ${media<0?"neg":"pos"}">${euro(media)}</span></div></div></section>`:""}
-  <section class="blocco"><h2>Obiettivi</h2>
+  <section class="blocco"><h2>Obiettivi${media!==null?` <span class="q">risparmi ${euroCorto(media)} al mese</span>`:""}</h2>
   ${ob.length?ob.map(o2=>{
     const perc=Math.min(100,o2.accantonato/o2.target*100), manca=Math.max(0,o2.target-o2.accantonato);
     let nota="", allerta=false;
@@ -727,6 +802,50 @@ function pannelloAccantona(o){
   <label class="campo"><span><input type="checkbox" id="accMov" checked style="width:auto;margin-right:7px">Registralo anche come uscita della categoria Risparmio</span></label>
   <button class="primario" data-conferma-acc="${o.id}">Accantona</button>`);
 }
+function pannelloSalvadanaio(modo){
+  const saldo=saldoSalvadanaio();
+  if(modo==="obiettivo"){
+    const ob=dati.obiettivi||[];
+    if(!ob.length){ toast("Prima crea un obiettivo"); return; }
+    apriPannello(`
+    <div class="foglio-testa"><h3>Sposta su un obiettivo</h3><button data-chiudi>Chiudi</button></div>
+    <p class="nota-foglio">Nel salvadanaio ci sono ${euro(saldo)}. Lo spostamento non tocca il budget del mese: quei soldi erano già stati risparmiati.</p>
+    <label class="campo"><span>Obiettivo</span><select id="obScelto">${ob.map(o=>`<option value="${o.id}">${esc(o.nome)}</option>`).join("")}</select></label>
+    <label class="campo"><span>Importo</span><input type="number" inputmode="decimal" step="0.01" id="impSal" placeholder="0,00"></label>
+    <button class="primario" data-sposta-ob>Sposta</button>`);
+    return;
+  }
+  apriPannello(`
+  <div class="foglio-testa"><h3>Salvadanaio</h3><button data-chiudi>Chiudi</button></div>
+  <p class="nota-foglio">Saldo attuale ${euro(saldo)}. Usa il segno meno per prelevare. Questo è un movimento del solo salvadanaio: non compare tra le spese del mese.</p>
+  <label class="campo"><span>Importo</span><input type="number" inputmode="decimal" step="0.01" id="impSal" placeholder="es. 50 oppure −50"></label>
+  <label class="campo"><span>Nota</span><input type="text" id="notaSal" placeholder="facoltativa"></label>
+  <button class="primario" data-salva-sal>Registra</button>`);
+}
+function pannelloInvestimento(i){
+  bozza = i?Object.assign({},i):{id:null,nome:"",importo:0,dataApertura:oggiISO(),stato:"aperto",valore:0,dataChiusura:""};
+  const chiuso=bozza.stato==="chiuso", r=bozza.valore-bozza.importo;
+  apriPannello(`
+  <div class="foglio-testa"><h3>${bozza.id?esc(bozza.nome):"Nuovo investimento"}</h3><button data-chiudi>Chiudi</button></div>
+  ${chiuso?`<p class="nota-foglio">Chiuso il ${dataBreve(bozza.dataChiusura)}: ${euro(bozza.importo)} diventati ${euro(bozza.valore)}, ${r>=0?"guadagno":"perdita"} di ${euro(Math.abs(r))}${bozza.daSalvadanaio?" rientrato nel salvadanaio col capitale":" registrato tra i movimenti di quel mese"}.</p>`:""}
+  ${!chiuso&&bozza.id?`<p class="nota-foglio">${bozza.daSalvadanaio?"Capitale preso dal salvadanaio: alla chiusura ci rientra tutto, risultato compreso.":"Annotazione: questo capitale non è stato tolto da nessun contatore."}</p>`:""}
+  <label class="campo"><span>Nome</span><input type="text" data-i="nome" value="${esc(bozza.nome)}" ${chiuso?"disabled":""} placeholder="ETF, BTP, fondo…"></label>
+  <div class="doppio">
+    <label class="campo"><span>Importo investito</span><input type="number" inputmode="decimal" step="0.01" data-i="importo" value="${bozza.importo||""}" ${chiuso?"disabled":""}></label>
+    <label class="campo"><span>Data di apertura</span><input type="date" data-i="dataApertura" value="${bozza.dataApertura}" ${chiuso?"disabled":""}></label>
+  </div>
+  ${!chiuso&&!bozza.id?`<label class="campo"><span><input type="checkbox" id="daSal" ${saldoSalvadanaio()>0?"checked":""} style="width:auto;margin-right:7px">Prendi il capitale dal salvadanaio (ci sono ${euro(saldoSalvadanaio())})</span>
+    <span style="margin-top:5px">Se lo lasci spento resta solo un'annotazione e nessun saldo si muove.</span></label>`:""}
+  ${!chiuso?`<button class="primario" data-salva-inv>${bozza.id?"Salva":"Apri la posizione"}</button>`:""}
+  ${bozza.id&&!chiuso?`<div style="margin-top:20px;padding-top:16px;border-top:1px solid var(--linea)">
+    <p class="nota-foglio">${bozza.daSalvadanaio?"Alla chiusura rientra nel salvadanaio il valore pieno: capitale più il risultato, in positivo o in negativo.":"Alla chiusura registro solo la differenza: guadagno come entrata, perdita come uscita del mese."}</p>
+    <div class="doppio">
+      <label class="campo"><span>Valore alla chiusura</span><input type="number" inputmode="decimal" step="0.01" id="valChiusura" placeholder="${bozza.importo}"></label>
+      <label class="campo"><span>Data</span><input type="date" id="dataChiusura" value="${oggiISO()}"></label>
+    </div>
+    <button class="primario" data-chiudi-inv>Chiudi la posizione</button></div>`:""}
+  ${bozza.id?'<button class="distruttivo" data-elimina-inv>Elimina</button>':""}`);
+}
 function pannelloImpostazioni(){
   apriPannello(`
   <div class="foglio-testa"><h3>Impostazioni</h3><button data-chiudi>Chiudi</button></div>
@@ -750,6 +869,17 @@ function pannelloImpostazioni(){
 /* ================= eventi ================= */
 function collega(){
   document.querySelectorAll("[data-vai]").forEach(b=>b.onclick=()=>cambiaVista(b.dataset.vai));
+  document.querySelectorAll("[data-chiudi-mese]").forEach(b=>b.onclick=()=>{
+    const mk=b.dataset.chiudiMese, parziale=chiudiMese(mk);
+    disegna();
+    toast(parziale>0?"Coperto in parte: mancano "+euro(parziale):"Mese chiuso");
+  });
+  document.querySelectorAll("[data-salta-mese]").forEach(b=>b.onclick=()=>{
+    dati.chiusure[b.dataset.saltaMese]="saltato"; salva(); disegna(); });
+  document.querySelectorAll("[data-salvad]").forEach(b=>b.onclick=()=>pannelloSalvadanaio(b.dataset.salvad));
+  document.querySelectorAll("[data-inv]").forEach(b=>b.onclick=()=>{
+    const i=(dati.investimenti||[]).find(x=>x.id===b.dataset.inv); if(i) pannelloInvestimento(i); });
+  const ni=document.querySelector("[data-nuovo-inv]"); if(ni) ni.onclick=()=>pannelloInvestimento(null);
   document.querySelectorAll("[data-voce]").forEach(b=>b.onclick=()=>{
     const v=dati.voci.find(x=>x.id===b.dataset.voce); if(v) pannelloVoce(v); });
   document.querySelectorAll("[data-mod-voce]").forEach(b=>b.onclick=()=>{
@@ -832,6 +962,72 @@ function collegaPannello(){
     dati.obiettivi=dati.obiettivi.filter(x=>x.id!==bozza.id);
     salva(); chiudiPannello(); disegna(); toast("Obiettivo eliminato"); };
   const ca=f.querySelector("[data-conferma-acc]"); if(ca) ca.onclick=()=>confermaAccantona(ca.dataset.confermaAcc);
+
+  /* salvadanaio */
+  const sal=f.querySelector("[data-salva-sal]"); if(sal) sal.onclick=()=>{
+    const imp=numero(document.getElementById("impSal").value);
+    if(!imp){ toast("Inserisci un importo"); return; }
+    dati.salvadanaio.push({id:id(),data:oggiISO(),importo:imp,tipo:"manuale",
+      nota:document.getElementById("notaSal").value.trim()});
+    salva(); chiudiPannello(); disegna(); toast(imp>0?"Versati "+euro(imp):"Prelevati "+euro(-imp)); };
+  const spo=f.querySelector("[data-sposta-ob]"); if(spo) spo.onclick=()=>{
+    const imp=numero(document.getElementById("impSal").value);
+    const ob=dati.obiettivi.find(x=>x.id===document.getElementById("obScelto").value);
+    if(!imp||!ob){ toast("Inserisci un importo"); return; }
+    if(imp>saldoSalvadanaio()){ toast("Nel salvadanaio non ci sono abbastanza soldi"); return; }
+    ob.accantonato=(ob.accantonato||0)+imp;
+    dati.salvadanaio.push({id:id(),data:oggiISO(),importo:-imp,tipo:"obiettivo",nota:ob.nome});
+    salva(); chiudiPannello(); disegna(); toast(euro(imp)+" su "+ob.nome); };
+
+  /* investimenti */
+  const svi=f.querySelector("[data-salva-inv]"); if(svi) svi.onclick=()=>{
+    f.querySelectorAll("[data-i]").forEach(i=>{
+      const k=i.dataset.i;
+      bozza[k] = k==="importo" ? numero(i.value) : i.value; });
+    if(!bozza.nome.trim()){ toast("Dai un nome all'investimento"); return; }
+    if(!bozza.importo){ toast("Inserisci l'importo investito"); return; }
+    if(bozza.id){
+      const n=dati.investimenti.findIndex(x=>x.id===bozza.id);
+      const prima=dati.investimenti[n].importo;
+      if(bozza.daSalvadanaio && Math.abs(bozza.importo-prima)>=0.005)
+        dati.salvadanaio.push({id:id(),data:oggiISO(),importo:prima-bozza.importo,
+          tipo:"investimento",nota:"Rettifica "+bozza.nome});
+      dati.investimenti[n]=Object.assign(dati.investimenti[n],bozza);
+    } else {
+      const cb=document.getElementById("daSal");
+      bozza.daSalvadanaio = !!(cb&&cb.checked);
+      if(bozza.daSalvadanaio && bozza.importo>saldoSalvadanaio()){
+        toast("Nel salvadanaio ci sono solo "+euro(saldoSalvadanaio())); return; }
+      bozza.id=id(); dati.investimenti.push(bozza);
+      if(bozza.daSalvadanaio)
+        dati.salvadanaio.push({id:id(),data:bozza.dataApertura,importo:-bozza.importo,
+          tipo:"investimento",nota:"Investito in "+bozza.nome});
+    }
+    salva(); chiudiPannello(); disegna(); toast("Investimento salvato"); };
+  const cin=f.querySelector("[data-chiudi-inv]"); if(cin) cin.onclick=()=>{
+    const val=numero(document.getElementById("valChiusura").value);
+    const data=document.getElementById("dataChiusura").value||oggiISO();
+    if(!val){ toast("Inserisci il valore alla chiusura"); return; }
+    const inv=dati.investimenti.find(x=>x.id===bozza.id);
+    inv.valore=val; inv.dataChiusura=data; inv.stato="chiuso";
+    const r=val-inv.importo;
+    if(inv.daSalvadanaio){
+      dati.salvadanaio.push({id:id(),data:data,importo:val,tipo:"investimento",
+        nota:"Chiusura "+inv.nome});
+    } else if(Math.abs(r)>=0.005){
+      dati.movimenti.push({id:id(),data:data,importo:Math.abs(r),
+        tipo:r>=0?"entrata":"uscita", categoria:r>=0?"Extra":"Altro",
+        nota:(r>=0?"Guadagno":"Perdita")+" investimento: "+inv.nome, voceId:null, investimentoId:inv.id});
+    }
+    salva(); chiudiPannello(); meseCorrente=meseDi(data); disegna();
+    toast(r>=0?"Chiuso con +"+euro(r):"Chiuso con −"+euro(-r)); };
+  const ein=f.querySelector("[data-elimina-inv]"); if(ein) ein.onclick=()=>{
+    if(!confirm("Eliminare questo investimento? Il movimento di guadagno o perdita già registrato resta.")) return;
+    if(bozza.daSalvadanaio && bozza.stato!=="chiuso")
+      dati.salvadanaio.push({id:id(),data:oggiISO(),importo:bozza.importo,
+        tipo:"investimento",nota:"Annullato "+bozza.nome});
+    dati.investimenti=dati.investimenti.filter(x=>x.id!==bozza.id);
+    salva(); chiudiPannello(); disegna(); toast("Investimento eliminato"); };
 
   /* impostazioni */
   const si=f.querySelector("[data-salva-imp]"); if(si) si.onclick=()=>{
@@ -939,7 +1135,7 @@ function importa(e){
       const j=migra(JSON.parse(r.result));
       if(!j.movimenti&&!j.voci) throw new Error("file non riconosciuto");
       if(!confirm("Sostituire i dati attuali con quelli del file?")) return;
-      dati=Object.assign({voci:[],movimenti:[],stime:{},obiettivi:[]},j);
+      dati=Object.assign({voci:[],movimenti:[],stime:{},obiettivi:[],salvadanaio:[],chiusure:{},investimenti:[]},j);
       salva(); chiudiPannello(); disegna(); toast("Dati importati");
     }catch(err){ toast("File non valido: "+err.message); }
   };
