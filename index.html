@@ -208,12 +208,13 @@ const CHIAVE="finanze.v2", CHIAVE_SYNC="finanze.sync";
 const MESI=["gennaio","febbraio","marzo","aprile","maggio","giugno","luglio","agosto","settembre","ottobre","novembre","dicembre"];
 const CAT_USCITA=["Casa","Spesa","Trasporti","Bollette","Salute","Famiglia","Svago","Risparmio","Altro"];
 const CAT_ENTRATA=["Stipendio","Extra","Rimborsi","Altro"];
+const PALETTE=["#A33B2A","#C8902E","#2B6E78","#2F6B4F","#7D5BA6","#B8654F","#4A7C8C","#8A9A3D","#C05F7A","#6B7B8C"];
 const CADENZE=[{n:1,e:"Ogni mese"},{n:2,e:"Ogni 2 mesi"},{n:3,e:"Ogni 3 mesi"},{n:4,e:"Ogni 4 mesi"},{n:6,e:"Ogni 6 mesi"},{n:12,e:"Una volta l'anno"}];
 
 /* ================= stato ================= */
-let dati={ voci:[], movimenti:[], stime:{}, obiettivi:[], salvadanaio:[], chiusure:{}, investimenti:[], saldi:{}, aggiornato:0 };
+let dati={ voci:[], movimenti:[], stime:{}, obiettivi:[], salvadanaio:[], chiusure:{}, investimenti:[], saldi:{}, categorie:{uscita:[],entrata:[]}, aggiornato:0 };
 let sync={ owner:"", repo:"", percorso:"finanze.json", ramo:"main", token:"", sha:null, ultimo:0 };
-let vistaAttiva="mese";
+let vistaAttiva="mese", schedaStorico="mesi", periodoCat="mese", tipoCat="uscita";
 let meseCorrente=chiaveMese(new Date());
 let bozza=null, timerPush=null;
 
@@ -253,6 +254,7 @@ function carica(){
   if(!dati.movimenti) dati.movimenti=[]; if(!dati.obiettivi) dati.obiettivi=[];
   if(!dati.salvadanaio) dati.salvadanaio=[]; if(!dati.chiusure) dati.chiusure={};
   if(!dati.investimenti) dati.investimenti=[]; if(!dati.saldi) dati.saldi={};
+  if(!dati.categorie) dati.categorie={uscita:[],entrata:[]};
 }
 function salva(){
   dati.aggiornato=Date.now();
@@ -282,7 +284,7 @@ async function tiraDaGitHub(silenzioso){
     const j=await r.json(); sync.sha=j.sha;
     const remoto=migra(JSON.parse(b64aTesto(j.content)));
     if((remoto.aggiornato||0)>(dati.aggiornato||0)){
-      dati=Object.assign({voci:[],movimenti:[],stime:{},obiettivi:[],salvadanaio:[],chiusure:{},investimenti:[],saldi:{}},remoto);
+      dati=Object.assign({voci:[],movimenti:[],stime:{},obiettivi:[],salvadanaio:[],chiusure:{},investimenti:[],saldi:{},categorie:{uscita:[],entrata:[]}},remoto);
       localStorage.setItem(CHIAVE,JSON.stringify(dati));
       disegna(); if(!silenzioso) toast("Dati aggiornati dal repository");
     }
@@ -310,6 +312,19 @@ async function spingiSuGitHub(){
 }
 
 /* ================= motore stime/reale ================= */
+function categorie(tipo){
+  const base=tipo==="entrata"?CAT_ENTRATA:CAT_USCITA;
+  const extra=((dati.categorie&&dati.categorie[tipo])||[]).filter(c=>base.indexOf(c)<0);
+  return base.concat(extra);
+}
+function aggiungiCategoria(tipo){
+  const n=(prompt("Nome della nuova categoria")||"").trim();
+  if(!n) return null;
+  if(categorie(tipo).some(c=>c.toLowerCase()===n.toLowerCase())){ toast("Categoria già presente"); return null; }
+  if(!dati.categorie[tipo]) dati.categorie[tipo]=[];
+  dati.categorie[tipo].push(n); salva();
+  return n;
+}
 function vociAttive(){ return (dati.voci||[]).filter(v=>v.attiva!==false); }
 function quota(v){ return v.importo/(v.cadenza||1); }
 function stimaMese(v,mk){ const o=dati.stime[v.id+":"+mk]; return o!=null?Number(o):quota(v); }
@@ -559,7 +574,63 @@ function vistaMovimenti(){
   return html+"</section>";
 }
 
+function selettoreStorico(){
+  return `<div class="tipo-switch" style="margin-top:14px">
+    <button data-scheda="mesi" aria-pressed="${schedaStorico==="mesi"}">Mesi</button>
+    <button data-scheda="categorie" aria-pressed="${schedaStorico==="categorie"}">Categorie</button>
+  </div>`;
+}
+function datiCategorie(){
+  const mesi=[];
+  if(periodoCat==="mese") mesi.push(meseCorrente);
+  else { const o=chiaveMese(new Date()); for(let i=11;i>=0;i--) mesi.push(meseAdiacente(o,-i)); }
+  const agg={};
+  (dati.movimenti||[]).forEach(m=>{
+    if(m.tipo!==tipoCat) return;
+    if(mesi.indexOf(meseDi(m.data))<0) return;
+    agg[m.categoria]=(agg[m.categoria]||0)+m.importo; });
+  const lista=Object.entries(agg).sort((a,b)=>b[1]-a[1]);
+  const mesiConDati=mesi.filter(mk=>(dati.movimenti||[]).some(m=>meseDi(m.data)===mk)).length;
+  return {lista, tot:lista.reduce((t,x)=>t+x[1],0), mesi:mesiConDati||1};
+}
+function ciambella(lista,tot){
+  const R=58, C=2*Math.PI*R; let off=0;
+  const archi=lista.map((x,i)=>{
+    const len=tot?x[1]/tot*C:0;
+    const el=`<circle cx="70" cy="70" r="${R}" fill="none" stroke="${PALETTE[i%PALETTE.length]}" stroke-width="20"
+      stroke-dasharray="${len.toFixed(2)} ${(C-len).toFixed(2)}" stroke-dashoffset="${(-off).toFixed(2)}"
+      transform="rotate(-90 70 70)"></circle>`;
+    off+=len; return el; }).join("");
+  return `<svg viewBox="0 0 140 140" style="width:170px;height:170px;display:block;margin:6px auto 2px" role="img">
+    ${archi||`<circle cx="70" cy="70" r="${R}" fill="none" stroke="#EDF0EA" stroke-width="20"></circle>`}
+    <text x="70" y="65" text-anchor="middle" font-size="8.5" fill="#5F6E6E">${tipoCat==="uscita"?"uscite":"entrate"}</text>
+    <text x="70" y="80" text-anchor="middle" font-size="15" font-weight="600" fill="#1B2A2E">${euroCorto(tot)}</text></svg>`;
+}
+function vistaCategorie(){
+  const d=datiCategorie();
+  return selettoreStorico()+`
+  <div class="filtri">
+    <select id="periodoCat"><option value="mese" ${periodoCat==="mese"?"selected":""}>${nomeMese(meseCorrente)}</option>
+      <option value="anno" ${periodoCat==="anno"?"selected":""}>Ultimi 12 mesi</option></select>
+    <select id="tipoCat"><option value="uscita" ${tipoCat==="uscita"?"selected":""}>Uscite</option>
+      <option value="entrata" ${tipoCat==="entrata"?"selected":""}>Entrate</option></select>
+  </div>
+  <section class="blocco" style="margin-top:12px">
+    ${ciambella(d.lista,d.tot)}
+    ${d.lista.length?d.lista.map((x,i)=>{
+      const perc=d.tot?x[1]/d.tot*100:0;
+      return `<div class="cat-riga"><div class="cat-testa">
+        <span><i style="display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:7px;background:${PALETTE[i%PALETTE.length]}"></i>${esc(x[0])}</span>
+        <span class="num">${euro(x[1])} <span class="d">${perc.toFixed(0)}%</span></span></div>
+        <div class="cat-barra"><span style="width:${perc}%;background:${PALETTE[i%PALETTE.length]}"></span></div>
+        ${periodoCat==="anno"?`<div class="cat-testa" style="margin:5px 0 0"><span class="d">${euro(x[1]/d.mesi)} al mese in media</span></div>`:""}
+      </div>`;}).join(""):'<div class="vuoto">Nessun movimento in questo periodo.</div>'}
+  </section>
+  ${d.lista.length>1?`<p style="font-size:.78rem;color:var(--soft);padding:12px 4px 0;margin:0">
+    ${esc(d.lista[0][0])} da sola vale il ${Math.round(d.lista[0][1]/d.tot*100)}% ${tipoCat==="uscita"?"di quello che spendi":"di quello che incassi"}${periodoCat==="anno"?" nell'anno":" questo mese"}.</p>`:""}`;
+}
 function vistaStorico(){
+  if(schedaStorico==="categorie") return vistaCategorie();
   const o=new Date(), serie=[];
   for(let i=11;i>=0;i--){
     const mk=meseAdiacente(chiaveMese(o),-i), b=bilancio(mk);
@@ -569,7 +640,7 @@ function vistaStorico(){
   const conDati=serie.filter(s=>s.e||s.u);
   const mediaU=conDati.length?conDati.reduce((s,x)=>s+x.u,0)/conDati.length:0;
   const scartoMedio=conDati.length?conDati.reduce((s,x)=>s+(x.u-x.su),0)/conDati.length:0;
-  return `
+  return selettoreStorico()+`
   <section class="blocco"><h2>Dodici mesi, importi reali</h2>
     <div class="colonne">${serie.map(s=>`<div class="colonna"><div class="coppia">
       <div class="e" style="height:${s.e/max*100}%"></div><div class="u" style="height:${s.u/max*100}%"></div>
@@ -734,7 +805,7 @@ function pannelloRitocca(v){
 function pannelloNuovaVoce(v){
   bozza = v ? Object.assign({},v)
     : {id:null,nome:"",tipo:"uscita",categoria:"Bollette",importo:0,cadenza:1,giorno:1,meseRif:new Date().getMonth()+1,fondoIniziale:0,inizio:null,attiva:true};
-  const cat=bozza.tipo==="entrata"?CAT_ENTRATA:CAT_USCITA;
+  const cat=categorie(bozza.tipo);
   apriPannello(`
   <div class="foglio-testa"><h3>${bozza.id?"Modifica voce":"Nuova voce delle stime"}</h3><button data-chiudi>Chiudi</button></div>
   <div class="tipo-switch">
@@ -748,7 +819,7 @@ function pannelloNuovaVoce(v){
   </div>
   <p class="nota-foglio" id="notaQuota"></p>
   <div class="doppio">
-    <label class="campo"><span>Categoria</span><select data-v="categoria">${cat.map(c=>`<option ${bozza.categoria===c?"selected":""}>${esc(c)}</option>`).join("")}</select></label>
+    <label class="campo"><span>Categoria</span><select data-v="categoria">${cat.map(c=>`<option ${bozza.categoria===c?"selected":""}>${esc(c)}</option>`).join("")}<option value="__nuova">+ nuova categoria…</option></select></label>
     <label class="campo" id="campoMese" ${bozza.cadenza>1?"":"hidden"}><span>Mese di pagamento</span>
       <select data-v="meseRif">${MESI.map((m,i)=>`<option value="${i+1}" ${bozza.meseRif===i+1?"selected":""}>${m}</option>`).join("")}</select></label>
     <label class="campo" id="campoGiorno" ${bozza.cadenza>1?"hidden":""}><span>Giorno del mese</span>
@@ -778,7 +849,7 @@ function pannelloMovimentoLibero(m){
   disegnaPannelloMovimento();
 }
 function disegnaPannelloMovimento(){
-  const cat=bozza.tipo==="entrata"?CAT_ENTRATA:CAT_USCITA;
+  const cat=categorie(bozza.tipo);
   if(!cat.includes(bozza.categoria)) bozza.categoria=cat[0];
   const testo=bozza.importo?bozza.importo.toLocaleString("it-IT",{minimumFractionDigits:2,maximumFractionDigits:2}):"0,00";
   const voci=vociAttive().filter(v=>v.tipo===bozza.tipo);
@@ -793,7 +864,8 @@ function disegnaPannelloMovimento(){
     ${[1,2,3,4,5,6,7,8,9].map(n=>`<button data-tasto="${n}">${n}</button>`).join("")}
     <button data-tasto="00">00</button><button data-tasto="0">0</button><button data-tasto="del">⌫</button>
   </div>
-  <div class="chips">${cat.map(c=>`<button class="chip" data-cat="${esc(c)}" aria-pressed="${bozza.categoria===c}">${esc(c)}</button>`).join("")}</div>
+  <div class="chips">${cat.map(c=>`<button class="chip" data-cat="${esc(c)}" aria-pressed="${bozza.categoria===c}">${esc(c)}</button>`).join("")}
+    <button class="chip" data-nuova-cat style="border-style:dashed">+ categoria</button></div>
   <div class="doppio">
     <label class="campo"><span>Data</span><input type="date" data-campo="data" value="${bozza.data}"></label>
     <label class="campo"><span>Nota</span><input type="text" data-campo="nota" value="${esc(bozza.nota||"")}" placeholder="facoltativa"></label>
@@ -908,6 +980,9 @@ function collega(){
   document.querySelectorAll("[data-chiudi-mese]").forEach(b=>b.onclick=()=>pannelloChiusura(b.dataset.chiudiMese));
   document.querySelectorAll("[data-salta-mese]").forEach(b=>b.onclick=()=>{
     dati.chiusure[b.dataset.saltaMese]="saltato"; salva(); disegna(); });
+  document.querySelectorAll("[data-scheda]").forEach(b=>b.onclick=()=>{ schedaStorico=b.dataset.scheda; disegna(); });
+  const pc=document.getElementById("periodoCat"); if(pc) pc.onchange=()=>{ periodoCat=pc.value; disegna(); };
+  const tc=document.getElementById("tipoCat"); if(tc) tc.onchange=()=>{ tipoCat=tc.value; disegna(); };
   document.querySelectorAll("[data-salvad]").forEach(b=>b.onclick=()=>pannelloSalvadanaio(b.dataset.salvad));
   document.querySelectorAll("[data-inv]").forEach(b=>b.onclick=()=>{
     const i=(dati.investimenti||[]).find(x=>x.id===b.dataset.inv); if(i) pannelloInvestimento(i); });
@@ -962,7 +1037,7 @@ function collegaPannello(){
   /* voce delle stime */
   f.querySelectorAll("[data-vtipo]").forEach(b=>b.onclick=()=>{
     leggiVoceForm(); bozza.tipo=b.dataset.vtipo;
-    bozza.categoria=(bozza.tipo==="entrata"?CAT_ENTRATA:CAT_USCITA)[0]; pannelloNuovaVoce(bozza); });
+    bozza.categoria=categorie(bozza.tipo)[0]; pannelloNuovaVoce(bozza); });
   const cad=f.querySelector('[data-v="cadenza"]');
   if(cad) cad.onchange=()=>{
     const p=Number(cad.value)>1;
@@ -971,6 +1046,13 @@ function collegaPannello(){
     document.getElementById("campoFondo").hidden=!p;
     aggiornaNotaQuota(); };
   const imp=f.querySelector('[data-v="importo"]'); if(imp) imp.oninput=aggiornaNotaQuota;
+  const selCat=f.querySelector('[data-v="categoria"]');
+  if(selCat) selCat.onchange=()=>{
+    if(selCat.value!=="__nuova") return;
+    leggiVoceForm();
+    const n=aggiungiCategoria(bozza.tipo);
+    bozza.categoria = n || categorie(bozza.tipo)[0];
+    pannelloNuovaVoce(bozza); };
   const sv=f.querySelector("[data-salva-voce]"); if(sv) sv.onclick=salvaVoce;
   const ev=f.querySelector("[data-elimina-voce]"); if(ev) ev.onclick=()=>{
     if(!confirm("Eliminare questa voce? I movimenti già registrati restano, come fuori stima.")) return;
@@ -981,6 +1063,11 @@ function collegaPannello(){
   /* movimento libero */
   f.querySelectorAll("[data-tipo]").forEach(b=>b.onclick=()=>{ leggiCampiMov(); bozza.tipo=b.dataset.tipo; disegnaPannelloMovimento(); });
   f.querySelectorAll("[data-cat]").forEach(b=>b.onclick=()=>{ leggiCampiMov(); bozza.categoria=b.dataset.cat; disegnaPannelloMovimento(); });
+  const nc=f.querySelector("[data-nuova-cat]"); if(nc) nc.onclick=()=>{
+    leggiCampiMov();
+    const n=aggiungiCategoria(bozza.tipo);
+    if(n) bozza.categoria=n;
+    disegnaPannelloMovimento(); };
   const sm=f.querySelector("[data-salva-mov]"); if(sm) sm.onclick=salvaMovimento;
   const em=f.querySelector("[data-elimina-mov]"); if(em) em.onclick=()=>{
     if(!confirm("Eliminare questo movimento?")) return;
@@ -1178,7 +1265,7 @@ function importa(e){
       const j=migra(JSON.parse(r.result));
       if(!j.movimenti&&!j.voci) throw new Error("file non riconosciuto");
       if(!confirm("Sostituire i dati attuali con quelli del file?")) return;
-      dati=Object.assign({voci:[],movimenti:[],stime:{},obiettivi:[],salvadanaio:[],chiusure:{},investimenti:[],saldi:{}},j);
+      dati=Object.assign({voci:[],movimenti:[],stime:{},obiettivi:[],salvadanaio:[],chiusure:{},investimenti:[],saldi:{},categorie:{uscita:[],entrata:[]}},j);
       salva(); chiudiPannello(); disegna(); toast("Dati importati");
     }catch(err){ toast("File non valido: "+err.message); }
   };
