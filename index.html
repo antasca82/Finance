@@ -458,7 +458,7 @@ function vistaMese(){
       </div></button>`;
   };
 
-  return avvisoChiusura() + `
+  return avvisoChiusura(meseCorrente) + `
   <section class="mese-barra">
     <div class="barra">
       <div class="seg speso" style="width:${pSpeso}%"></div>
@@ -510,9 +510,9 @@ function vistaMese(){
   </section>`;
 }
 
-function avvisoChiusura(){
+function avvisoChiusura(mese){
   const ms=mesiDaChiudere(); if(!ms.length) return "";
-  const mk=ms[0], a=avanzoMese(mk);
+  const mk=(mese&&ms.indexOf(mese)>=0)?mese:ms[0], a=avanzoMese(mk);
   if(Math.abs(a)<0.005){ return ""; }
   return `<div class="avviso">${nomeMese(mk)} si è chiuso con ${a>=0?"un avanzo di <b>"+euro(a)+"</b>":"un disavanzo di <b>"+euro(-a)+"</b>"}.
     <button data-chiudi-mese="${mk}">${a>=0?"Mettilo nel salvadanaio":"Coprilo dal salvadanaio"}</button> ·
