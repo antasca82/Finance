@@ -211,7 +211,7 @@ const CAT_ENTRATA=["Stipendio","Extra","Rimborsi","Altro"];
 const CADENZE=[{n:1,e:"Ogni mese"},{n:2,e:"Ogni 2 mesi"},{n:3,e:"Ogni 3 mesi"},{n:4,e:"Ogni 4 mesi"},{n:6,e:"Ogni 6 mesi"},{n:12,e:"Una volta l'anno"}];
 
 /* ================= stato ================= */
-let dati={ voci:[], movimenti:[], stime:{}, obiettivi:[], salvadanaio:[], chiusure:{}, investimenti:[], aggiornato:0 };
+let dati={ voci:[], movimenti:[], stime:{}, obiettivi:[], salvadanaio:[], chiusure:{}, investimenti:[], saldi:{}, aggiornato:0 };
 let sync={ owner:"", repo:"", percorso:"finanze.json", ramo:"main", token:"", sha:null, ultimo:0 };
 let vistaAttiva="mese";
 let meseCorrente=chiaveMese(new Date());
@@ -252,7 +252,7 @@ function carica(){
   if(!dati.voci) dati.voci=[]; if(!dati.stime) dati.stime={};
   if(!dati.movimenti) dati.movimenti=[]; if(!dati.obiettivi) dati.obiettivi=[];
   if(!dati.salvadanaio) dati.salvadanaio=[]; if(!dati.chiusure) dati.chiusure={};
-  if(!dati.investimenti) dati.investimenti=[];
+  if(!dati.investimenti) dati.investimenti=[]; if(!dati.saldi) dati.saldi={};
 }
 function salva(){
   dati.aggiornato=Date.now();
@@ -282,7 +282,7 @@ async function tiraDaGitHub(silenzioso){
     const j=await r.json(); sync.sha=j.sha;
     const remoto=migra(JSON.parse(b64aTesto(j.content)));
     if((remoto.aggiornato||0)>(dati.aggiornato||0)){
-      dati=Object.assign({voci:[],movimenti:[],stime:{},obiettivi:[],salvadanaio:[],chiusure:{},investimenti:[]},remoto);
+      dati=Object.assign({voci:[],movimenti:[],stime:{},obiettivi:[],salvadanaio:[],chiusure:{},investimenti:[],saldi:{}},remoto);
       localStorage.setItem(CHIAVE,JSON.stringify(dati));
       disegna(); if(!silenzioso) toast("Dati aggiornati dal repository");
     }
@@ -391,6 +391,16 @@ function chiudiMese(mk){
   dati.chiusure[mk]="chiuso";
   salva();
   return parziale;
+}
+function saldoReale(mk){ return (dati.saldi&&dati.saldi[mk]!=null)?Number(dati.saldi[mk]):null; }
+function ultimoSaldo(){
+  const k=Object.keys(dati.saldi||{}).sort();
+  return k.length?{mese:k[k.length-1],importo:Number(dati.saldi[k[k.length-1]])}:null;
+}
+function scostamento(mk){
+  const r=saldoReale(mk), prec=saldoReale(meseAdiacente(mk,-1));
+  if(r===null||prec===null) return null;
+  return r-(prec+avanzoMese(mk));
 }
 function giorniRimanenti(mk){
   const o=new Date(), mo=chiaveMese(o);
@@ -617,6 +627,19 @@ function vistaRisparmi(){
       <div class="corpo"><div class="titolo">${esc(etichettaSalvadanaio(r))}</div><div class="sotto">${dataBreve(r.data)}</div></div>
       <div class="cifra num ${r.importo>=0?"pos":"neg"}">${r.importo>=0?"+":"−"}${euro(Math.abs(r.importo))}</div></div>`).join("")}
     </section>`:`<section class="blocco"><div class="vuoto"><b>Qui finisce quello che avanza</b>Alla fine di ogni mese ti chiedo se mettere l'avanzo nel salvadanaio. Nei mesi pesanti lo stesso pulsante attinge da qui invece di farti chiudere in rosso.</div></section>`}
+  ${(()=>{
+    const u=ultimoSaldo();
+    if(!u) return `<section class="blocco"><h2>Allineamento col conto</h2>
+      <div class="vuoto">Alla chiusura di ogni mese puoi annotare quanto c'è davvero sul conto. Dal secondo in poi ti segnalo se i movimenti registrati non tornano con la banca.</div></section>`;
+    const sc=scostamento(u.mese), sal=saldoSalvadanaio();
+    return `<section class="blocco"><h2>Allineamento col conto</h2>
+      <div class="cat-riga"><div class="cat-testa"><span>Sul conto a fine ${nomeMese(u.mese)}</span><span class="num">${euro(u.importo)}</span></div></div>
+      ${sc!==null?`<div class="cat-riga"><div class="cat-testa"><span>Scostamento dai movimenti registrati</span>
+        <span class="num ${Math.abs(sc)>=1?"neg":"pos"}">${sc>0?"+":""}${euro(sc)}</span></div>
+        <div class="cat-testa"><span class="d">${Math.abs(sc)<1?"I conti tornano."
+          :(sc>0?"Sul conto c'è più del previsto: manca un'entrata da registrare.":"Sul conto c'è meno del previsto: manca un'uscita da registrare.")}</span></div></div>`:""}
+      ${sal>u.importo?`<div class="cat-riga"><div class="cat-testa"><span class="d" style="color:var(--uscita)">Il salvadanaio dichiara ${euro(sal)}, più di quanto c'era sul conto. Qualcosa non quadra.</span></div></div>`:""}
+    </section>`;})()}
   ${bloccoObiettivi()}
   <section class="blocco"><h2>Investimenti${chiusi.length?` <span class="q">risultato ${risultato>=0?"+":"−"}${euroCorto(Math.abs(risultato))}</span>`:""}</h2>
   ${aperti.map(i=>`<button class="voce" data-inv="${i.id}">
@@ -802,6 +825,19 @@ function pannelloAccantona(o){
   <label class="campo"><span><input type="checkbox" id="accMov" checked style="width:auto;margin-right:7px">Registralo anche come uscita della categoria Risparmio</span></label>
   <button class="primario" data-conferma-acc="${o.id}">Accantona</button>`);
 }
+function pannelloChiusura(mk){
+  const a=avanzoMese(mk), prec=saldoReale(meseAdiacente(mk,-1));
+  apriPannello(`
+  <div class="foglio-testa"><h3>Chiudi ${nomeMese(mk)}</h3><button data-chiudi>Chiudi</button></div>
+  <p class="nota-foglio">${a>=0?`Avanzo di <b>${euro(a)}</b>: lo verso nel salvadanaio.`
+    :`Disavanzo di <b>${euro(-a)}</b>: lo prelevo dal salvadanaio, dove ci sono ${euro(saldoSalvadanaio())}.`}</p>
+  <label class="campo"><span>Saldo del conto a fine ${nomeMese(mk).split(" ")[0]} (facoltativo)</span>
+    <input type="number" inputmode="decimal" step="0.01" id="saldoFine" value="${saldoReale(mk)!=null?saldoReale(mk):""}" placeholder="quello che dice la banca">
+    <span style="margin-top:5px">${prec!==null
+      ? `In base ai movimenti registrati dovrebbero essercene ${euro(prec+a)}.`
+      : "Il primo saldo serve da riferimento: dal mese successivo ti segnalo gli scostamenti."}</span></label>
+  <button class="primario" data-conferma-chiusura="${mk}">Chiudi il mese</button>`);
+}
 function pannelloSalvadanaio(modo){
   const saldo=saldoSalvadanaio();
   if(modo==="obiettivo"){
@@ -869,11 +905,7 @@ function pannelloImpostazioni(){
 /* ================= eventi ================= */
 function collega(){
   document.querySelectorAll("[data-vai]").forEach(b=>b.onclick=()=>cambiaVista(b.dataset.vai));
-  document.querySelectorAll("[data-chiudi-mese]").forEach(b=>b.onclick=()=>{
-    const mk=b.dataset.chiudiMese, parziale=chiudiMese(mk);
-    disegna();
-    toast(parziale>0?"Coperto in parte: mancano "+euro(parziale):"Mese chiuso");
-  });
+  document.querySelectorAll("[data-chiudi-mese]").forEach(b=>b.onclick=()=>pannelloChiusura(b.dataset.chiudiMese));
   document.querySelectorAll("[data-salta-mese]").forEach(b=>b.onclick=()=>{
     dati.chiusure[b.dataset.saltaMese]="saltato"; salva(); disegna(); });
   document.querySelectorAll("[data-salvad]").forEach(b=>b.onclick=()=>pannelloSalvadanaio(b.dataset.salvad));
@@ -962,6 +994,17 @@ function collegaPannello(){
     dati.obiettivi=dati.obiettivi.filter(x=>x.id!==bozza.id);
     salva(); chiudiPannello(); disegna(); toast("Obiettivo eliminato"); };
   const ca=f.querySelector("[data-conferma-acc]"); if(ca) ca.onclick=()=>confermaAccantona(ca.dataset.confermaAcc);
+
+  /* chiusura del mese */
+  const cc=f.querySelector("[data-conferma-chiusura]"); if(cc) cc.onclick=()=>{
+    const mk=cc.dataset.confermaChiusura, v=document.getElementById("saldoFine").value;
+    if(v!=="") dati.saldi[mk]=numero(v);
+    const parziale=chiudiMese(mk);
+    const sc=scostamento(mk);
+    chiudiPannello(); disegna();
+    if(sc!==null&&Math.abs(sc)>=1) toast("Scostamento col conto: "+(sc>0?"+":"−")+euro(Math.abs(sc)));
+    else if(parziale>0) toast("Coperto in parte: mancano "+euro(parziale));
+    else toast("Mese chiuso"); };
 
   /* salvadanaio */
   const sal=f.querySelector("[data-salva-sal]"); if(sal) sal.onclick=()=>{
@@ -1135,7 +1178,7 @@ function importa(e){
       const j=migra(JSON.parse(r.result));
       if(!j.movimenti&&!j.voci) throw new Error("file non riconosciuto");
       if(!confirm("Sostituire i dati attuali con quelli del file?")) return;
-      dati=Object.assign({voci:[],movimenti:[],stime:{},obiettivi:[],salvadanaio:[],chiusure:{},investimenti:[]},j);
+      dati=Object.assign({voci:[],movimenti:[],stime:{},obiettivi:[],salvadanaio:[],chiusure:{},investimenti:[],saldi:{}},j);
       salva(); chiudiPannello(); disegna(); toast("Dati importati");
     }catch(err){ toast("File non valido: "+err.message); }
   };
